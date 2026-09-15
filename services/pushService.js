@@ -74,15 +74,20 @@ async function realSend(connector, topic, pushToken, useSandbox) {
 }
 
 async function notifyPassUpdated(serialNumber, { db = null, sender = null } = {}) {
+  const report = (result) => {
+    // Server-side only (Render logs). Counts and reasons — never device tokens.
+    console.log(`push ${serialNumber}: ${JSON.stringify(result)}`);
+    return result;
+  };
   try {
-    if (!apnsConfigured()) return { sent: false, reason: 'APNS_NOT_CONFIGURED' };
-    if (!db) return { sent: false, reason: 'NO_DATABASE' };
+    if (!apnsConfigured()) return report({ sent: false, reason: 'APNS_NOT_CONFIGURED' });
+    if (!db) return report({ sent: false, reason: 'NO_DATABASE' });
 
     const tokens = await getPushTokens(db, serialNumber);
-    if (tokens.length === 0) return { sent: false, reason: 'NO_REGISTERED_DEVICES' };
+    if (tokens.length === 0) return report({ sent: false, reason: 'NO_REGISTERED_DEVICES' });
 
     const topic = process.env.APNS_TOPIC || process.env.PASS_TYPE_IDENTIFIER;
-    if (!topic) return { sent: false, reason: 'APNS_TOPIC_NOT_CONFIGURED' };
+    if (!topic) return report({ sent: false, reason: 'APNS_TOPIC_NOT_CONFIGURED' });
     const useSandbox = process.env.NODE_ENV !== 'production';
     const connector = sender ? null : await loadConnector();
 
@@ -95,15 +100,16 @@ async function notifyPassUpdated(serialNumber, { db = null, sender = null } = {}
     );
     const delivered = results.filter((r) => r.status === 'fulfilled').length;
     const failed = results.length - delivered;
-    return {
+    const outcome = {
       sent: delivered > 0,
       delivered,
       failed,
       useSandbox,
       ...(failed > 0 ? { reason: 'SOME_DELIVERIES_FAILED' } : {}),
     };
+    return report(outcome);
   } catch (err) {
-    return { sent: false, reason: err.message };
+    return report({ sent: false, reason: err.message });
   }
 }
 
