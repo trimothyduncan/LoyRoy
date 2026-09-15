@@ -50,6 +50,7 @@ function createAdminRouter() {
       try {
         const { data, error } = await getDb().from('tiers').select('name').limit(1);
         const fs = require('node:fs');
+        const cfg = require('../config');
         const exists = (p) => {
           try {
             return fs.existsSync(p);
@@ -57,6 +58,12 @@ function createAdminRouter() {
             return false;
           }
         };
+        let secretsDir = [];
+        try {
+          secretsDir = fs.readdirSync('/etc/secrets');
+        } catch {
+          secretsDir = [];
+        }
         res.json({
           ok: !error,
           ms: Date.now() - started,
@@ -65,12 +72,13 @@ function createAdminRouter() {
           error: error ? String(error.message || error).slice(0, 300) : null,
           // Paths + existence only — never file contents or secret values.
           signing: {
-            certPath: process.env.SIGNER_CERT_PATH || './certificates/signerCert.pem',
-            certExists: exists(process.env.SIGNER_CERT_PATH || './certificates/signerCert.pem'),
-            keyPath: process.env.SIGNER_KEY_PATH || './certificates/signerKey.pem',
-            keyExists: exists(process.env.SIGNER_KEY_PATH || './certificates/signerKey.pem'),
-            wwdrPath: process.env.WWDR_PATH || './certificates/wwdr.pem',
-            wwdrExists: exists(process.env.WWDR_PATH || './certificates/wwdr.pem'),
+            certPath: cfg.signerCertPath,
+            certExists: exists(cfg.signerCertPath),
+            keyPath: cfg.signerKeyPath,
+            keyExists: exists(cfg.signerKeyPath),
+            wwdrPath: cfg.wwdrPath,
+            wwdrExists: exists(cfg.wwdrPath),
+            renderSecretsDir: secretsDir,
             passphraseSet: Boolean(process.env.SIGNER_KEY_PASSPHRASE),
             passTypeIdentifierSet: Boolean(process.env.PASS_TYPE_IDENTIFIER),
             teamIdSet: Boolean(process.env.APPLE_TEAM_ID),
