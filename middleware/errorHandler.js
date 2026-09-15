@@ -11,6 +11,11 @@ function errorHandler(err, req, res, next) {
     status >= 500 && process.env.NODE_ENV === 'production'
       ? 'Internal server error'
       : err.message || 'Internal server error';
+  if (status >= 500) {
+    // Server-side only: Render logs carry the real message + code.
+    // Clients still get the generic shape below.
+    console.error(`[${code}] ${req.method} ${req.path}: ${err.message}`);
+  }
   res.status(status).json({ error: { code, message } });
 }
 

@@ -34,6 +34,36 @@ function createAdminRouter() {
     }
   );
 
+  // GET /admin/diag-supabase — connectivity probe. Service-key gated.
+  // Reports the raw Supabase error text (never credentials) so production
+  // DB failures can be diagnosed without guessing.
+  router.get('/admin/diag-supabase', async (req, res, next) => {
+    try {
+      const { getDb } = require('../database/db');
+      let host = 'unset';
+      try {
+        host = new URL(process.env.SUPABASE_URL || '').hostname || 'unset';
+      } catch {
+        host = 'malformed-url';
+      }
+      const started = Date.now();
+      try {
+        const { data, error } = await getDb().from('tiers').select('name').limit(1);
+        res.json({
+          ok: !error,
+          ms: Date.now() - started,
+          host,
+          rows: data ? data.length : 0,
+          error: error ? String(error.message || error).slice(0, 300) : null,
+        });
+      } catch (err) {
+        res.json({ ok: false, ms: Date.now() - started, host, error: String(err.message || err).slice(0, 300) });
+      }
+    } catch (err) {
+      next(err);
+    }
+  });
+
   return router;
 }
 
