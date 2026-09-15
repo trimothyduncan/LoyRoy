@@ -1,0 +1,39 @@
+{
+  "name": "loyroy",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "engines": {
+    "node": ">=20 <27"
+  },
+  "scripts": {
+    "dev": "node app.js",
+    "start": "NODE_ENV=production node app.js",
+    "test": "jest --runInBand",
+    "lint": "eslint ."
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testPathIgnorePatterns": ["/node_modules/", "/dashboard/"]
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-validator": "^7.3.2",
+    "hapns": "^1.0.2",
+    "morgan": "^1.12.1",
+    "passkit-generator": "^3.6.0"
+  },
+  "devDependencies": {
+    "adm-zip": "^0.6.1",
+    "eslint": "^10.10.0",
+    "jest": "^30.5.1",
+    "supertest": "^7.2.2"
+  }
+}

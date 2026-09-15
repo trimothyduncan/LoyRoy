@@ -1,0 +1,25 @@
+{
+  "formatVersion": 1,
+  "passTypeIdentifier": "pass.com.example.vipMembership",
+  "serialNumber": "REPLACE-ME",
+  "teamIdentifier": "REPLACE-ME",
+  "organizationName": "LoyRoy VIP",
+  "description": "LoyRoy VIP Membership",
+  "foregroundColor": "rgb(255, 255, 255)",
+  "backgroundColor": "rgb(20, 20, 20)",
+  "labelColor": "rgb(200, 200, 200)",
+  "storeCard": {
+    "headerFields": [{ "key": "tier", "label": "TIER", "value": "Gold" }],
+    "primaryFields": [{ "key": "points", "label": "POINTS", "value": 1250 }],
+    "secondaryFields": [{ "key": "member", "label": "MEMBER", "value": "Jane Appleseed" }],
+    "auxiliaryFields": [{ "key": "memberId", "label": "MEMBER ID", "value": "C001" }],
+    "backFields": [{ "key": "terms", "label": "TERMS", "value": "Points are managed by LoyRoy. Present this pass at checkout." }]
+  },
+  "barcodes": [
+    {
+      "message": "LOYROY-C001",
+      "format": "PKBarcodeFormatQR",
+      "messageEncoding": "iso-8859-1"
+    }
+  ]
+}

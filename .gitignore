@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Env & secrets — never commit these (see SECURITY.md)
+.env
+.env.local
+.env.*.local
+certificates/
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# Logs & OS
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+
+# Test artifacts
+coverage/
+tmp/
+*.pkpass

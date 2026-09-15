@@ -1,0 +1,60 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "PROJECT_PLAN.md",
+    "TECH_STACK.md",
+    "API_SPEC.md",
+    "SECURITY.md"
+  ],
+  "watcher": {
+    "ignore": ["node_modules/**", "dist/**", "build/**", ".git/**", "certificates/**"]
+  },
+  "permission": {
+    "read": {
+      "*": "allow",
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow",
+      "*.pem": "deny",
+      "*.key": "deny",
+      "*.p8": "deny",
+      "*.p12": "deny",
+      "*.pfx": "deny",
+      "certificates/**": "deny"
+    },
+    "edit": {
+      "*": "allow",
+      "certificates/**": "deny",
+      "*.pem": "deny",
+      "*.p8": "deny",
+      "*.p12": "deny",
+      "*.pfx": "deny"
+    },
+    "bash": {
+      "*": "allow",
+      "rm -rf *": "ask",
+      "sudo *": "deny",
+      "git push *": "ask",
+      "git push --force*": "deny"
+    },
+    "external_directory": {
+      "*": "ask"
+    }
+  },
+  "mcp": {
+    "context7": {
+      "type": "local",
+      "command": ["npx", "-y", "@upstash/context7-mcp"],
+      "enabled": true
+    },
+    "github": {
+      "type": "remote",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:GITHUB_PAT}"
+      },
+      "enabled": false
+    }
+  }
+}

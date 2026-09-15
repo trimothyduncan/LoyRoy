@@ -1,0 +1,65 @@
+# Render blueprint: Express API + Next.js admin dashboard.
+# Create a Blueprint instance from this file, then set the env vars listed in
+# RUNBOOK.md §2 in the Render dashboard (secret files for the APNs .p8 key).
+services:
+  - type: web
+    name: loyroy-api
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: node app.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SIGNER_CERT_PATH
+        value: ./certificates/signerCert.pem
+      - key: SIGNER_KEY_PATH
+        value: ./certificates/signerKey.pem
+      - key: WWDR_PATH
+        value: ./certificates/wwdr.pem
+      - key: SIGNER_KEY_PASSPHRASE
+        sync: false
+      - key: PASS_TYPE_IDENTIFIER
+        sync: false
+      - key: APPLE_TEAM_ID
+        sync: false
+      - key: SERVICE_API_KEY
+        generateValue: true
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        sync: false
+      - key: APNS_KEY_PATH
+        sync: false
+      - key: APNS_KEY_ID
+        sync: false
+      - key: APNS_TEAM_ID
+        sync: false
+
+  - type: web
+    name: loyroy-admin
+    runtime: node
+    plan: starter
+    rootDir: dashboard/admin-panel
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BACKEND_URL
+        sync: false
+      - key: SERVICE_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_API_KEY
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+        sync: false
+      - key: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+        sync: false
