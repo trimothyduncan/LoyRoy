@@ -64,12 +64,30 @@ async function getPushTokens(db, serialNumber) {
   return tokens;
 }
 
+/**
+ * Apple Wallet pass-update notification: empty payload ({}), background
+ * push type, priority 5, topic = pass type identifier. Built directly
+ * because hapns's BackgroundNotification injects aps.content-available.
+ * Synchronous (no imports) so it stays unit-testable under Jest/CJS —
+ * hapns's send() only reads these fields. The bitmask is hapns's public
+ * Connector.Token value (0b010); a mismatch fails loudly at send time.
+ */
+function buildPassUpdateNotification(topic) {
+  return {
+    topic,
+    pushType: 'background',
+    priority: 5,
+    expiration: 0,
+    collapseID: undefined,
+    supportedConnectors: 0b010,
+    body: {},
+  };
+}
+
 async function realSend(connector, topic, pushToken, useSandbox) {
-  const { BackgroundNotification } = await import('hapns/notifications/BackgroundNotification');
   const { Device } = await import('hapns/targets/device');
   const { send } = await import('hapns/send');
-  // Empty background push: tells Wallet to re-fetch the pass. No alert body.
-  return send(connector, BackgroundNotification(topic, { appData: {} }), Device(pushToken), {
+  return send(connector, buildPassUpdateNotification(topic), Device(pushToken), {
     useSandbox,
   });
 }
@@ -119,4 +137,4 @@ function _reset() {
   connectorCache = null;
 }
 
-module.exports = { notifyPassUpdated, _reset };
+module.exports = { notifyPassUpdated, buildPassUpdateNotification, _reset };

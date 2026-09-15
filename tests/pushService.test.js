@@ -1,7 +1,7 @@
 'use strict';
 
 const { createFakeDb } = require('./fakeSupabase');
-const { notifyPassUpdated, _reset } = require('../services/pushService');
+const { notifyPassUpdated, buildPassUpdateNotification, _reset } = require('../services/pushService');
 
 const OLD_ENV = { ...process.env };
 
@@ -72,5 +72,16 @@ describe('pushService', () => {
     };
     const res = await notifyPassUpdated('S-1', { db, sender });
     expect(res).toMatchObject({ sent: false, delivered: 0, failed: 1 });
+  });
+
+  it('builds an empty-payload background notification for Wallet passes', () => {
+    const n = buildPassUpdateNotification('pass.test.id');
+    expect(n).toMatchObject({
+      topic: 'pass.test.id',
+      pushType: 'background',
+      priority: 5,
+      body: {},
+    });
+    expect(n.body).not.toHaveProperty('aps');
   });
 });
