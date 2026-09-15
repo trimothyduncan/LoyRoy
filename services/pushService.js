@@ -18,6 +18,7 @@
  */
 
 const fs = require('node:fs');
+const config = require('../config');
 
 let connectorCache = null;
 
@@ -28,7 +29,7 @@ function apnsConfigured() {
 async function loadConnector() {
   if (connectorCache) return connectorCache;
   const { TokenConnector } = await import('hapns/connectors/token');
-  const keyPath = process.env.APNS_KEY_PATH;
+  const keyPath = config.apnsKeyPath;
   let keyBytes;
   try {
     keyBytes = new Uint8Array(fs.readFileSync(keyPath));

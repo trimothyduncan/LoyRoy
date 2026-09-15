@@ -15,10 +15,13 @@ function env(name, fallback = '') {
 // use it — this keeps signing working even when *_PATH vars weren't updated.
 function resolveCertPath(configured) {
   if (configured && fs.existsSync(configured)) return configured;
-  const renderPath = path.join('/etc/secrets', path.basename(configured || ''));
-  if (configured && !fs.existsSync(configured) && fs.existsSync(renderPath)) {
-    console.log(`config: ${configured} missing, falling back to ${renderPath}`);
-    return renderPath;
+  const base = path.basename(configured || '');
+  if (base) {
+    const renderPath = path.join('/etc/secrets', base);
+    if (fs.existsSync(renderPath)) {
+      console.log(`config: ${configured} missing, falling back to ${renderPath}`);
+      return renderPath;
+    }
   }
   return configured;
 }
@@ -36,4 +39,5 @@ module.exports = {
   signerKeyPassphrase: env('SIGNER_KEY_PASSPHRASE', ''),
   passTypeIdentifier: env('PASS_TYPE_IDENTIFIER', ''),
   appleTeamId: env('APPLE_TEAM_ID', ''),
+  apnsKeyPath: resolveCertPath(env('APNS_KEY_PATH', '')),
 };

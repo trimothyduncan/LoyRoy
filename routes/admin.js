@@ -90,6 +90,8 @@ function createAdminRouter() {
             wwdrExists: exists(cfg.wwdrPath),
             wwdrBytes: sizeOf(cfg.wwdrPath),
             renderSecretsDir: secretsDir,
+            apnsKeyPath: cfg.apnsKeyPath,
+            apnsKeyExists: exists(cfg.apnsKeyPath),
             passphraseSet: Boolean(process.env.SIGNER_KEY_PASSPHRASE),
             passTypeIdentifierSet: Boolean(process.env.PASS_TYPE_IDENTIFIER),
             teamIdSet: Boolean(process.env.APPLE_TEAM_ID),
