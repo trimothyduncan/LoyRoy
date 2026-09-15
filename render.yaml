@@ -47,9 +47,10 @@ services:
     name: loyroy-admin
     runtime: node
     plan: starter
-    rootDir: dashboard/admin-panel
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    # No rootDir: commands cd into the app so this works identically for
+    # Blueprint and manually-created services (which default to repo root).
+    buildCommand: cd dashboard/admin-panel && npm install && npm run build
+    startCommand: cd dashboard/admin-panel && npm start
     envVars:
       - key: NODE_ENV
         value: production
