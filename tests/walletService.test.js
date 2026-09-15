@@ -47,18 +47,19 @@ describe('buildPassJson', () => {
 });
 
 describe('generatePass', () => {
-  // With the real (encrypted) signer key but no passphrase configured, the
-  // service must fail fast with PASS_KEY_ERROR — not a node-forge TypeError.
-  // Once SIGNER_KEY_PASSPHRASE is set, this performs the full real-cert
-  // signing validation (Phase 2 Definition of Done).
+  // Without the signer-key passphrase no signature can be produced. The
+  // service must fail fast with a 500 carrying a stable code — PASS_KEY_ERROR
+  // when the (encrypted) key files exist, PASS_FILE_ERROR when they don't
+  // (e.g. a CI checkout without certificates/). With the passphrase set,
+  // this performs the full real-cert signing validation (Phase 2 DoD).
   it('signs with the real cert, or fails fast without its passphrase', async () => {
     if (!process.env.SIGNER_KEY_PASSPHRASE) {
-      await expect(
-        generatePass(
-          { memberId: 'C001', name: 'Jane Appleseed', tier: 'gold', points: 1250 },
-          identifiers()
-        )
-      ).rejects.toMatchObject({ code: 'PASS_KEY_ERROR' });
+      const err = await generatePass(
+        { memberId: 'C001', name: 'Jane Appleseed', tier: 'gold', points: 1250 },
+        identifiers()
+      ).catch((e) => e);
+      expect(err.status).toBe(500);
+      expect(['PASS_KEY_ERROR', 'PASS_FILE_ERROR']).toContain(err.code);
       return;
     }
 

@@ -37,6 +37,12 @@ function loadFile(filePath, label) {
     return fs.readFileSync(filePath);
   } catch (err) {
     err.message = `walletService: cannot read ${label} at ${filePath}: ${err.message}`;
+    err.status = 500;
+    // PASS_FILE_ERROR (missing/unreadable file, e.g. no certificates/ checkout
+    // on CI) vs PASS_KEY_ERROR (encrypted key, no passphrase) — both fail fast.
+    // Assigned unconditionally: fs errors arrive with codes like ENOENT that
+    // would otherwise leak through and break the error contract.
+    err.code = 'PASS_FILE_ERROR';
     throw err;
   }
 }
