@@ -58,6 +58,14 @@ function createAdminRouter() {
             return false;
           }
         };
+        // Byte sizes only — identifies truncated/mangled pastes, never contents.
+        const sizeOf = (p) => {
+          try {
+            return fs.statSync(p).size;
+          } catch {
+            return -1;
+          }
+        };
         let secretsDir = [];
         try {
           secretsDir = fs.readdirSync('/etc/secrets');
@@ -74,10 +82,13 @@ function createAdminRouter() {
           signing: {
             certPath: cfg.signerCertPath,
             certExists: exists(cfg.signerCertPath),
+            certBytes: sizeOf(cfg.signerCertPath),
             keyPath: cfg.signerKeyPath,
             keyExists: exists(cfg.signerKeyPath),
+            keyBytes: sizeOf(cfg.signerKeyPath),
             wwdrPath: cfg.wwdrPath,
             wwdrExists: exists(cfg.wwdrPath),
+            wwdrBytes: sizeOf(cfg.wwdrPath),
             renderSecretsDir: secretsDir,
             passphraseSet: Boolean(process.env.SIGNER_KEY_PASSPHRASE),
             passTypeIdentifierSet: Boolean(process.env.PASS_TYPE_IDENTIFIER),
