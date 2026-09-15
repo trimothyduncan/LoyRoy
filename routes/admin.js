@@ -49,12 +49,32 @@ function createAdminRouter() {
       const started = Date.now();
       try {
         const { data, error } = await getDb().from('tiers').select('name').limit(1);
+        const fs = require('node:fs');
+        const exists = (p) => {
+          try {
+            return fs.existsSync(p);
+          } catch {
+            return false;
+          }
+        };
         res.json({
           ok: !error,
           ms: Date.now() - started,
           host,
           rows: data ? data.length : 0,
           error: error ? String(error.message || error).slice(0, 300) : null,
+          // Paths + existence only — never file contents or secret values.
+          signing: {
+            certPath: process.env.SIGNER_CERT_PATH || './certificates/signerCert.pem',
+            certExists: exists(process.env.SIGNER_CERT_PATH || './certificates/signerCert.pem'),
+            keyPath: process.env.SIGNER_KEY_PATH || './certificates/signerKey.pem',
+            keyExists: exists(process.env.SIGNER_KEY_PATH || './certificates/signerKey.pem'),
+            wwdrPath: process.env.WWDR_PATH || './certificates/wwdr.pem',
+            wwdrExists: exists(process.env.WWDR_PATH || './certificates/wwdr.pem'),
+            passphraseSet: Boolean(process.env.SIGNER_KEY_PASSPHRASE),
+            passTypeIdentifierSet: Boolean(process.env.PASS_TYPE_IDENTIFIER),
+            teamIdSet: Boolean(process.env.APPLE_TEAM_ID),
+          },
         });
       } catch (err) {
         res.json({ ok: false, ms: Date.now() - started, host, error: String(err.message || err).slice(0, 300) });
