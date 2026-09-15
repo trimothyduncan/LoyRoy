@@ -61,7 +61,15 @@ function createFakeDb() {
           return { data: state.wantSelect ? matched[0] ?? null : null, error: null };
         }
         if (state.op === 'delete') {
+          const matched = tables[table].filter(match);
+          const ids = new Set(matched.map((r) => r.id));
           tables[table] = tables[table].filter((r) => !match(r));
+          // Mirror the schema's ON DELETE CASCADE from members.
+          if (table === 'members') {
+            for (const t of ['points_ledger', 'visits', 'redemptions', 'devices']) {
+              tables[t] = (tables[t] || []).filter((r) => !ids.has(r.member_id));
+            }
+          }
           return { data: null, error: null };
         }
         let out = tables[table].filter(match);

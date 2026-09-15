@@ -121,6 +121,31 @@ describe('GET /member/:id', () => {
   });
 });
 
+describe('DELETE /member/:id', () => {
+  it('removes the member and their pass state', async () => {
+    const m = await members.createMember(db, { name: 'Olive' });
+    await members.addPoints(db, m.id, 100, 'earn');
+    await members.updateMemberPass(db, m.id, { passSerial: 'LOYROY-DEL', authToken: 't' });
+    db._tables.apple_registrations.push({
+      pass_type_id: 'p',
+      serial_number: 'LOYROY-DEL',
+      device_library_id: 'D1',
+    });
+
+    const res = await auth(request(app).delete(`/member/${m.id}`));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ success: true, memberId: m.id });
+    await expect(members.getMemberById(db, m.id)).rejects.toMatchObject({ status: 404 });
+    expect(db._tables.apple_registrations).toHaveLength(0);
+    expect(db._tables.points_ledger).toHaveLength(0);
+  });
+
+  it('404s unknown members', async () => {
+    const res = await auth(request(app).delete('/member/nope'));
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('POST /register-device', () => {
   it('records an app-level device token', async () => {
     const m = await members.createMember(db, { name: 'Lou' });

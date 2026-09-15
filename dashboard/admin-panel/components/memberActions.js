@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 async function post(path, body) {
   const res = await fetch(path, {
@@ -82,6 +83,50 @@ export function PushButton({ memberId }) {
         Send Wallet push
       </button>
       {msg && <span className="ml-2 text-sm text-zinc-600">{msg}</span>}
+    </span>
+  );
+}
+
+export function DeleteButton({ memberId, memberName }) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function remove() {
+    setMsg("");
+    try {
+      const res = await fetch(`/api/loyroy/member/${encodeURIComponent(memberId)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error?.message || `Delete failed (${res.status})`);
+      router.replace("/members");
+    } catch (err) {
+      setMsg(`Error: ${err.message}`);
+      setConfirming(false);
+    }
+  }
+
+  if (!confirming) {
+    return (
+      <button
+        className="rounded border border-red-300 px-3 py-1 text-sm text-red-700"
+        onClick={() => setConfirming(true)}
+      >
+        Delete member
+      </button>
+    );
+  }
+  return (
+    <span className="text-sm">
+      Delete {memberName}? Their pass stops updating.
+      <button className="ml-2 rounded bg-red-700 px-3 py-1 text-white" onClick={remove}>
+        Confirm delete
+      </button>
+      <button className="ml-2 rounded border border-zinc-300 px-3 py-1" onClick={() => setConfirming(false)}>
+        Cancel
+      </button>
+      {msg && <span className="ml-2 text-zinc-600">{msg}</span>}
     </span>
   );
 }

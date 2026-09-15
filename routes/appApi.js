@@ -191,6 +191,20 @@ function createAppRouter({ db, wallet, push }) {
     }
   );
 
+  // DELETE /member/:id (admin removal) ------------------------------------
+  router.delete(
+    '/member/:id',
+    [param('id').isString().notEmpty().withMessage('id is required')],
+    validate,
+    async (req, res, next) => {
+      try {
+        res.json(await members.deleteMember(db, req.params.id));
+      } catch (err) {
+        next(err);
+      }
+    }
+  );
+
   // POST /register-device -------------------------------------------------
   router.post(
     '/register-device',

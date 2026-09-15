@@ -126,8 +126,7 @@ async function recordVisit(db, memberId, note = '') {
   return { memberId, visitedAt: now };
 }
 
-async function getHistory(db, memberId, limit = 50) {
-  db = withDb(db);
+async function getHistory(db, memberId, limit = 50) {  db = withDb(db);
   await getMemberById(db, memberId);
   const [ledger, visits, redemptions] = await Promise.all([
     db.from('points_ledger').select('*').eq('member_id', memberId).order('created_at', { ascending: false }).limit(limit),
@@ -187,6 +186,32 @@ async function redeemReward(db, { memberId, serialNumber, rewardId }) {
   return { success: true, newBalance, redemptionId: redemption.id };
 }
 
+/**
+ * Delete a member and all member-linked rows (ledger, visits, redemptions,
+ * app devices cascade via FK). Apple registrations + pass-update state for
+ * the member's serial are removed explicitly (no FK to members), so deleted
+ * passes stop receiving pushes and disappear from changed-serials lookups.
+ */
+async function deleteMember(db, memberId) {
+  db = withDb(db);
+  const member = await getMemberById(db, memberId);
+  if (member.pass_serial) {
+    const { error: regError } = await db
+      .from('apple_registrations')
+      .delete()
+      .eq('serial_number', member.pass_serial);
+    if (regError) throw dbError(regError);
+    const { error: updateError } = await db
+      .from('pass_updates')
+      .delete()
+      .eq('serial_number', member.pass_serial);
+    if (updateError) throw dbError(updateError);
+  }
+  const { error } = await db.from('members').delete().eq('id', memberId);
+  if (error) throw dbError(error);
+  return { success: true, memberId };
+}
+
 module.exports = {
   createMember,
   getMemberById,
@@ -198,4 +223,5 @@ module.exports = {
   getHistory,
   createReward,
   redeemReward,
+  deleteMember,
 };

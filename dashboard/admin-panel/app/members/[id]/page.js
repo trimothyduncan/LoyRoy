@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { backendJson } from "@/lib/backend";
-import { AdjustPointsForm, PushButton } from "@/components/memberActions";
+import { AdjustPointsForm, PushButton, DeleteButton } from "@/components/memberActions";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +38,9 @@ export default async function MemberDetailPage({ params }) {
         </div>
         <div className="mt-2">
           <PushButton memberId={member.memberId} />
+        </div>
+        <div className="mt-4 border-t border-zinc-200 pt-3">
+          <DeleteButton memberId={member.memberId} memberName={member.name} />
         </div>
       </section>
 

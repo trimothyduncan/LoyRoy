@@ -53,3 +53,8 @@ export async function POST(request, { params }) {
   const { slug } = await params;
   return proxy(request, slug);
 }
+
+export async function DELETE(request, { params }) {
+  const { slug } = await params;
+  return proxy(request, slug);
+}
