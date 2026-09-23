@@ -1,5 +1,9 @@
 'use strict';
 
+// Self-contained like appApi.test.js: CI has no .env, so never rely on a
+// developer-machine SERVICE_API_KEY leaking in through dotenv.
+process.env.SERVICE_API_KEY = process.env.SERVICE_API_KEY || 'test-service-key';
+
 const request = require('supertest');
 const app = require('../app');
 
