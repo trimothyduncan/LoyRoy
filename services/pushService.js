@@ -14,7 +14,10 @@
  * Required env for real sends (see SECURITY.md for how to obtain):
  *   APNS_KEY_PATH (./certificates/AuthKey_<KEYID>.p8), APNS_KEY_ID,
  *   APNS_TEAM_ID, and APNS_TOPIC (defaults to PASS_TYPE_IDENTIFIER).
- * Sandbox is used unless NODE_ENV=production.
+ * Apple Wallet pass pushes work ONLY in production APNs
+ * (https://developer.apple.com/documentation/walletpasses/adding-a-web-service-to-update-passes).
+ * This module therefore always uses production unless APNS_USE_SANDBOX=true
+ * is set explicitly (local manual probing only — never for real devices).
  */
 
 const fs = require('node:fs');
@@ -44,14 +47,14 @@ async function loadConnector() {
   return connectorCache;
 }
 
-/** Push tokens of devices registered for this pass serial. Never logged. */
-async function getPushTokens(db, serialNumber) {
+/** Push targets registered for this pass serial. Tokens are never logged. */
+async function getPushTargets(db, serialNumber) {
   const { data: regs, error } = await db
     .from('apple_registrations')
     .select('device_library_id')
     .eq('serial_number', serialNumber);
   if (error) throw new Error(`database: ${error.message}`);
-  const tokens = [];
+  const targets = [];
   for (const { device_library_id } of regs) {
     const { data: device, error: deviceError } = await db
       .from('apple_devices')
@@ -59,9 +62,45 @@ async function getPushTokens(db, serialNumber) {
       .eq('device_library_id', device_library_id)
       .maybeSingle();
     if (deviceError) throw new Error(`database: ${deviceError.message}`);
-    if (device && device.push_token) tokens.push(device.push_token);
+    if (device && device.push_token) {
+      targets.push({ token: device.push_token, deviceLibraryId: device_library_id });
+    }
   }
-  return tokens;
+  return targets;
+}
+
+/**
+ * hapns error names whose meaning is "this token will never work again —
+ * stop sending to it" (Apple: "Delete a device if APNs returns an error
+ * that the push token is invalid"). Anything else (auth, throttling,
+ * network, server errors) must NOT prune: retrying is correct there.
+ */
+const INVALID_TOKEN_ERRORS = new Set([
+  'BadDeviceTokenError',
+  'UnregisteredError',
+  'ExpiredTokenError',
+]);
+
+function describeSendError(err) {
+  const name = (err && (err.name || err.code)) || 'Error';
+  const message = String((err && err.message) || err).slice(0, 160);
+  return `${name}: ${message}`;
+}
+
+/** Drop one dead registration; remove the device row if nothing references it. */
+async function pruneInvalidToken(db, serialNumber, deviceLibraryId) {
+  await db
+    .from('apple_registrations')
+    .delete()
+    .eq('serial_number', serialNumber)
+    .eq('device_library_id', deviceLibraryId);
+  const { data: remaining } = await db
+    .from('apple_registrations')
+    .select('serial_number')
+    .eq('device_library_id', deviceLibraryId);
+  if (!remaining || remaining.length === 0) {
+    await db.from('apple_devices').delete().eq('device_library_id', deviceLibraryId);
+  }
 }
 
 /**
@@ -102,29 +141,55 @@ async function notifyPassUpdated(serialNumber, { db = null, sender = null } = {}
     if (!apnsConfigured()) return report({ sent: false, reason: 'APNS_NOT_CONFIGURED' });
     if (!db) return report({ sent: false, reason: 'NO_DATABASE' });
 
-    const tokens = await getPushTokens(db, serialNumber);
-    if (tokens.length === 0) return report({ sent: false, reason: 'NO_REGISTERED_DEVICES' });
+    const targets = await getPushTargets(db, serialNumber);
+    if (targets.length === 0) return report({ sent: false, reason: 'NO_REGISTERED_DEVICES' });
 
     const topic = process.env.APNS_TOPIC || process.env.PASS_TYPE_IDENTIFIER;
     if (!topic) return report({ sent: false, reason: 'APNS_TOPIC_NOT_CONFIGURED' });
-    const useSandbox = process.env.NODE_ENV !== 'production';
+    // Pass updates MUST go to production APNs — sandbox pushes never wake Wallet.
+    const useSandbox = process.env.APNS_USE_SANDBOX === 'true';
     const connector = sender ? null : await loadConnector();
 
     const results = await Promise.allSettled(
-      tokens.map((token) =>
+      targets.map((t) =>
         sender
-          ? sender(topic, token, useSandbox)
-          : realSend(connector, topic, token, useSandbox)
+          ? sender(topic, t.token, useSandbox)
+          : realSend(connector, topic, t.token, useSandbox)
       )
     );
     const delivered = results.filter((r) => r.status === 'fulfilled').length;
     const failed = results.length - delivered;
+    // Surface Apple's actual rejection reasons (names + messages only —
+    // never device tokens). Without these, every failure looks identical.
+    const errors = [
+      ...new Set(
+        results
+          .filter((r) => r.status === 'rejected')
+          .map((r) => describeSendError(r.reason))
+      ),
+    ];
+    // Drop registrations Apple says are dead tokens so the next push
+    // doesn't waste sends on them (and NO_REGISTERED_DEVICES eventually
+    // tells the truth instead of masking rot).
+    let pruned = 0;
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      if (r.status === 'rejected' && INVALID_TOKEN_ERRORS.has(r.reason?.name)) {
+        try {
+          await pruneInvalidToken(db, serialNumber, targets[i].deviceLibraryId);
+          pruned++;
+        } catch {
+          // Best-effort: a prune failure must not fail the push report.
+        }
+      }
+    }
     const outcome = {
       sent: delivered > 0,
       delivered,
       failed,
       useSandbox,
-      ...(failed > 0 ? { reason: 'SOME_DELIVERIES_FAILED' } : {}),
+      ...(failed > 0 ? { reason: 'SOME_DELIVERIES_FAILED', errors } : {}),
+      ...(pruned > 0 ? { pruned } : {}),
     };
     return report(outcome);
   } catch (err) {

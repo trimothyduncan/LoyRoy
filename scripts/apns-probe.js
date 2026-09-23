@@ -1,11 +1,13 @@
 'use strict';
 
 /**
- * APNs sandbox auth probe. Sends an empty Wallet pass push to an
- * all-zeros device token in SANDBOX and reports what Apple returns:
+ * APNs auth probe. Sends an empty Wallet pass push to an
+ * all-zeros device token and reports what Apple returns:
  *   - 400/BadDeviceToken => key + IDs authenticate (expected: token is fake)
  *   - 403               => auth rejected (wrong Key ID / Team ID / key file)
- *   - network error     => sandbox unreachable from here
+ *   - network error     => APNs unreachable from here
+ * Wallet passes use PRODUCTION APNs only (Apple docs), so this probes
+ * production by default; APNS_USE_SANDBOX=true overrides for comparison.
  * Usage: node scripts/apns-probe.js
  */
 
@@ -25,12 +27,14 @@ async function main() {
     teamIdentifier: process.env.APNS_TEAM_ID,
   });
   const topic = process.env.APNS_TOPIC || process.env.PASS_TYPE_IDENTIFIER;
+  const useSandbox = process.env.APNS_USE_SANDBOX === 'true';
+  console.log(`APNs probe: topic=${topic} useSandbox=${useSandbox}`);
   try {
     const res = await send(
       connector,
       BackgroundNotification(topic, { appData: {} }),
       Device('0'.repeat(64)),
-      { useSandbox: true }
+      { useSandbox }
     );
     console.log('APNs response:', JSON.stringify(res).slice(0, 300));
   } catch (err) {

@@ -130,8 +130,17 @@ function createAppleRouter({ db, wallet, passTypeIdentifier } = {}) {
           .eq('serial_number', key.serialNumber)
           .maybeSingle();
         await registerAppleDevice(db, { ...key, pushToken: req.body.pushToken });
+        // Never log the push token — device ID + serial are enough to correlate.
+        console.log(
+          `apple-register serial=${key.serialNumber} device=${key.deviceLibraryId} ${existing ? 200 : 201}`
+        );
         res.status(existing ? 200 : 201).end();
       } catch (err) {
+        // Auth failures here (401) mean the installed pass's token or the
+        // pass type ID doesn't match the server — the top NO_REGISTERED_DEVICES cause.
+        if (err.status === 401) {
+          console.log(`apple-register serial=${req.params.serialNumber} 401`);
+        }
         next(err);
       }
     }
@@ -148,6 +157,9 @@ function createAppleRouter({ db, wallet, passTypeIdentifier } = {}) {
           passTypeId: req.params.passTypeIdentifier,
           serialNumber: req.params.serialNumber,
         });
+        console.log(
+          `apple-unregister serial=${req.params.serialNumber} device=${req.params.deviceLibraryIdentifier} 200`
+        );
         res.status(200).end();
       } catch (err) {
         next(err);
@@ -193,6 +205,7 @@ function createAppleRouter({ db, wallet, passTypeIdentifier } = {}) {
         authenticationToken: member.auth_token,
         ...(base ? { webServiceURL: `${base}/apple` } : {}),
       });
+      console.log(`apple-fetch serial=${member.pass_serial} 200`);
       res.set({
         'Content-Type': 'application/vnd.apple.pkpass',
         'Last-Modified': lastModified.toUTCString(),

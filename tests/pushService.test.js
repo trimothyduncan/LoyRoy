@@ -84,4 +84,44 @@ describe('pushService', () => {
     });
     expect(n.body).not.toHaveProperty('aps');
   });
+
+  it('surfaces Apple rejection reasons without logging device tokens', async () => {
+    setApnsEnv();
+    const db = createFakeDb();
+    db._tables.apple_devices.push({ device_library_id: 'D1', push_token: 'token-1' });
+    db._tables.apple_registrations.push(
+      { pass_type_id: 'p', serial_number: 'S-1', device_library_id: 'D1' }
+    );
+    const sender = async () => {
+      const err = new Error('The specified device token is invalid.');
+      err.name = 'BadDeviceTokenError';
+      throw err;
+    };
+    const res = await notifyPassUpdated('S-1', { db, sender });
+    expect(res).toMatchObject({ sent: false, delivered: 0, failed: 1, pruned: 1 });
+    expect(JSON.stringify(res)).toContain('BadDeviceTokenError');
+    expect(JSON.stringify(res)).not.toContain('token-1');
+    // Dead registration pruned; orphaned device row removed.
+    expect(db._tables.apple_registrations).toHaveLength(0);
+    expect(db._tables.apple_devices).toHaveLength(0);
+  });
+
+  it('does not prune on auth/throttle errors (retry is correct there)', async () => {
+    setApnsEnv();
+    const db = createFakeDb();
+    db._tables.apple_devices.push({ device_library_id: 'D1', push_token: 'token-1' });
+    db._tables.apple_registrations.push(
+      { pass_type_id: 'p', serial_number: 'S-1', device_library_id: 'D1' }
+    );
+    const sender = async () => {
+      const err = new Error('The provider token is not valid.');
+      err.name = 'InvalidProviderTokenError';
+      throw err;
+    };
+    const res = await notifyPassUpdated('S-1', { db, sender });
+    expect(res).toMatchObject({ sent: false, failed: 1 });
+    expect(res).not.toHaveProperty('pruned');
+    expect(JSON.stringify(res)).toContain('InvalidProviderTokenError');
+    expect(db._tables.apple_registrations).toHaveLength(1);
+  });
 });
