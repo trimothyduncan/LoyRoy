@@ -102,6 +102,13 @@ async function authenticateDevice(db, req, opts) {
       if (err.status !== 404) throw err;
     }
   }
+  // Distinguish "this device has no registrations at all" (regs.length 0:
+  // unknown/deleted device) from "it has registrations but presented a token
+  // matching none of them" (regs.length > 0: stale copy or multi-pass
+  // confusion). Tokens themselves are never logged.
+  console.log(
+    `apple-serials device=${req.params.deviceLibraryIdentifier} regs=${regs.length} 401`
+  );
   throw unauthorized();
 }
 

@@ -1,0 +1,47 @@
+{
+  "name": "loyalty-saas-builder",
+  "version": "1.0.0",
+  "mode_on_first_run": "AUDIT",
+  "workflow": [
+    "OBSERVE",
+    "PLAN",
+    "EXECUTE",
+    "VERIFY",
+    "DOCUMENT"
+  ],
+  "first_run_entrypoint": "agent/01-AUDIT-PROTOCOL.md",
+  "master_instructions": "AGENTS.md",
+  "task_ledger": "agent/TASK_LEDGER.md",
+  "environment_schema": "agent/ENVIRONMENT_SCHEMA.yaml",
+  "recovery_protocol": "agent/16-RECOVERY-PROTOCOL.md",
+  "definition_of_done": "agent/18-DEFINITION-OF-DONE.md",
+  "production_destructive_actions": "REQUIRE_APPROVAL",
+  "secret_logging": false,
+  "secret_committing": false,
+  "automatic_speculative_retries": false,
+  "audit_before_write": true,
+  "required_capabilities": {
+    "repository": [
+      "read",
+      "write",
+      "execute",
+      "git"
+    ],
+    "supabase": [
+      "inspect",
+      "database",
+      "migrations",
+      "auth"
+    ],
+    "render": [
+      "inspect",
+      "deployments",
+      "logs",
+      "environment_metadata"
+    ],
+    "wallet": [
+      "apple_integration",
+      "google_integration"
+    ]
+  }
+}
