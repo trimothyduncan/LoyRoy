@@ -78,6 +78,36 @@ function authDiagnostics(req, opts) {
   };
 }
 
+/**
+ * Freshness for a pass: the newest of the member's own change and any art
+ * publish for their tier.
+ *
+ * Art is tier-scoped, so a member row that has not been touched still has a
+ * newer pass after the merchant republishes that tier. Keying the 304 purely
+ * off members.updated_at would answer "not modified" and the device would keep
+ * the stale artwork forever.
+ */
+async function passLastModified(db, member) {
+  let latest = member.updated_at ? new Date(member.updated_at) : new Date(0);
+  try {
+    const { data } = await db
+      .from('pass_art')
+      .select('updated_at')
+      .eq('tier', String(member.tier || '').toLowerCase())
+      .eq('status', 'published')
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    if (data && data.length && data[0].updated_at) {
+      const artAt = new Date(data[0].updated_at);
+      if (artAt > latest) latest = artAt;
+    }
+  } catch {
+    // Art lookup is best-effort: falling back to members.updated_at is still
+    // correct, just less eager to invalidate.
+  }
+  return latest;
+}
+
 /** Load member by serial and verify the ApplePass token. Returns the member. */
 async function authenticatePass(db, req, opts) {
   checkPassType(req, opts);
@@ -284,7 +314,7 @@ function createAppleRouter({ db, wallet, passTypeIdentifier } = {}) {
   router.get('/v1/passes/:passTypeIdentifier/:serialNumber', async (req, res, next) => {
     try {
       const member = await authenticatePass(db, req, opts);
-      const lastModified = member.updated_at ? new Date(member.updated_at) : new Date();
+      const lastModified = await passLastModified(db, member);
       const ifModifiedSince = req.headers['if-modified-since'];
       if (ifModifiedSince && lastModified <= new Date(ifModifiedSince)) {
         console.log(`apple-fetch serial=${member.pass_serial} 304`);

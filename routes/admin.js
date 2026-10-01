@@ -1,7 +1,5 @@
 'use strict';
 
-const fs = require('node:fs');
-const path = require('node:path');
 const { Router } = require('express');
 const { body } = require('express-validator');
 const { validate } = require('../middleware/validate');
@@ -22,10 +20,6 @@ const SLOT_FILES = {
   artwork: ['artwork.png'],
   primaryLogo: ['primaryLogo.png'],
 };
-
-function artBaseDir(artBase) {
-  return artBase || path.join(__dirname, '..', 'passes');
-}
 
 function storageClient(injected) {
   if (injected) return injected;
@@ -58,7 +52,38 @@ async function toBuffer(data) {
   throw notFound('Asset could not be read.');
 }
 
-function createAdminRouter({ db, storage, artBase } = {}) {
+/**
+ * Flag every pass belonging to a tier as changed, so installed passes re-fetch.
+ *
+ * Art lives on the tier, not the member, so all members on that tier are
+ * affected. Bumps pass_updates per serial, which is what the device's
+ * `passesUpdatedSince` poll reads. Returns how many serials were signalled.
+ *
+ * Failures are logged, not thrown: the art is already published at this point,
+ * and a pass with stale art is better than a 500 that hides the publish.
+ */
+async function signalTierPassUpdates(db, tier) {
+  try {
+    const { touchPassUpdate } = require('../database/apple');
+    const { data: members, error } = await db
+      .from('members')
+      .select('id,pass_serial')
+      .eq('tier', tier);
+    if (error) throw new Error(error.message);
+    let count = 0;
+    for (const m of members || []) {
+      if (!m.pass_serial) continue;
+      await touchPassUpdate(db, m.pass_serial);
+      count += 1;
+    }
+    return count;
+  } catch (err) {
+    console.error(`admin-publish-art: could not signal passes for ${tier}: ${err.message}`);
+    return 0;
+  }
+}
+
+function createAdminRouter({ db, storage } = {}) {
   const router = Router();
   const store = () => storageClient(storage);
   const database = () => {
@@ -297,10 +322,15 @@ function createAdminRouter({ db, storage, artBase } = {}) {
     }
   );
 
-  // POST /admin/publish-art — apply a tier's drafts to passes/<tier>.pass/.
-  // NOTE: on hosts with ephemeral disks (Render without a persistent disk)
-  // published files live until the next deploy — commit winning art into
-  // the repo for durability.
+  // POST /admin/publish-art — mark a tier's drafts as the live art.
+  //
+  // Publishing only flips pass_art.status. Rendering reads published rows from
+  // Supabase Storage (services/artService.js), which is the durable copy — so
+  // there is no filesystem write here and nothing to lose on the next deploy.
+  //
+  // It also signals every pass on this tier, otherwise installed passes never
+  // learn to re-fetch: without a touchPassUpdate the device's
+  // `passesUpdatedSince` poll returns nothing and the new art is never seen.
   router.post(
     '/admin/publish-art',
     [body('tier').isIn(ART_TIERS).withMessage('tier must be a valid tier')],
@@ -308,7 +338,6 @@ function createAdminRouter({ db, storage, artBase } = {}) {
     async (req, res, next) => {
       try {
         const { tier } = req.body;
-        const bucket = storageBucket();
         const table = () => database().from('pass_art');
         const { data: drafts, error } = await table()
           .select('tier,slot,storage_path,status')
@@ -326,34 +355,28 @@ function createAdminRouter({ db, storage, artBase } = {}) {
           err.code = 'VALIDATION_ERROR';
           throw err;
         }
-        const dir = path.join(artBaseDir(artBase), `${tier}.pass`);
-        fs.mkdirSync(dir, { recursive: true });
         const published = [];
         for (const d of drafts) {
-          const files = SLOT_FILES[d.slot] || [];
-          const dl = await store().from(bucket).download(d.storage_path);
-          if (dl.error) throw notFound(`Asset not found in storage: ${d.storage_path}`);
-          const buffer = await toBuffer(dl.data);
-          if (buffer.length > MAX_BYTES) {
-            const err = new Error(`file exceeds 5MB limit: ${d.storage_path}`);
-            err.status = 400;
-            err.code = 'VALIDATION_ERROR';
-            throw err;
-          }
-          for (const file of files) {
-            fs.writeFileSync(path.join(dir, file), buffer);
-          }
-          const row = { status: 'published', updated_at: new Date().toISOString() };
-          const { error: updateError } = await table().update(row).eq('tier', tier).eq('slot', d.slot);
+          const { error: updateError } = await table()
+            .update({ status: 'published', updated_at: new Date().toISOString() })
+            .eq('tier', tier)
+            .eq('slot', d.slot);
           if (updateError) {
             const err = new Error(`database: ${updateError.message}`);
             err.status = 500;
             err.code = 'DB_ERROR';
             throw err;
           }
-          published.push({ slot: d.slot, files });
+          published.push({ slot: d.slot, files: SLOT_FILES[d.slot] || [] });
         }
-        res.json({ tier, published });
+
+        // Nudge installed passes on this tier so they re-fetch.
+        const signalled = await signalTierPassUpdates(database(), tier);
+        console.log(
+          `admin-publish-art tier=${tier} slots=${published.map((p) => p.slot).join(',')} signalled=${signalled}`
+        );
+
+        res.json({ tier, published, signalled });
       } catch (err) {
         next(err);
       }

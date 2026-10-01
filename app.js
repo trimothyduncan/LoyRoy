@@ -26,10 +26,42 @@ function lazyDb() {
   );
 }
 
-function createApp({ db, wallet, push, passTypeIdentifier, storage, artBase } = {}) {
+/**
+ * Wrap the real walletService so every generatePass() renders the merchant's
+ * published art from Supabase Storage.
+ *
+ * The bucket is read per call rather than captured, so a deploy that sets
+ * SUPABASE_STORAGE_BUCKET does not need a restart to take effect. With no
+ * bucket configured the resolver returns the bundled 1x1 placeholders, which
+ * keeps pass generation working instead of failing.
+ */
+function createStorageBackedWallet(db, injectedStorage) {
+  const walletService = require('./services/walletService');
+  const { resolveTierAssets } = require('./services/artService');
+
+  return {
+    ...walletService,
+    generatePass(memberData, opts = {}) {
+      const artResolver =
+        opts.artResolver ||
+        ((tier) => {
+          const bucket = process.env.SUPABASE_STORAGE_BUCKET;
+          const storage = injectedStorage || require('./database/db').getDb().storage;
+          return resolveTierAssets({ db, storage, bucket }, tier);
+        });
+      return walletService.generatePass(memberData, { ...opts, artResolver });
+    },
+  };
+}
+
+function createApp({ db, wallet, push, passTypeIdentifier, storage } = {}) {
   const app = express();
   const database = db || lazyDb();
-  const walletService = wallet || require('./services/walletService');
+
+  // The real wallet service renders art from Supabase Storage (the only durable
+  // copy — Render has no persistent disk). Tests inject a fake `wallet` and are
+  // left untouched.
+  const walletService = wallet || createStorageBackedWallet(database, storage);
 
   app.use(cors());
   // 8mb accommodates base64 pass-asset uploads on /admin/upload-asset
@@ -45,7 +77,7 @@ function createApp({ db, wallet, push, passTypeIdentifier, storage, artBase } = 
   app.use('/apple', createAppleRouter({ db: database, wallet: walletService, passTypeIdentifier }));
 
   app.use(serviceAuth);
-  app.use(createAdminRouter({ db: database, storage, artBase }));
+  app.use(createAdminRouter({ db: database, storage }));
   app.use(createAnalyticsRouter({ db: database }));
   app.use(
     createAppRouter({

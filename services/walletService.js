@@ -157,9 +157,31 @@ function buildPassJson(memberData) {
 }
 
 /**
+ * Assemble the pass-package image set for a member.
+ *
+ * Prefers art published through the Art Studio (Supabase Storage is the only
+ * durable copy — see services/artService.js). Falls back to the on-disk
+ * template directory when no storage is wired (tests, or a boot without
+ * credentials) so structural pass generation keeps working.
+ */
+async function resolveAssets(memberData, opts) {
+  if (opts.templateDir) {
+    return loadTemplateAssets(opts.templateDir);
+  }
+  if (opts.artResolver) {
+    const { assets } = await opts.artResolver(memberData.tier);
+    return assets;
+  }
+  return loadTemplateAssets(templateDirForTier(memberData.tier));
+}
+
+/**
  * Generate a signed .pkpass for one member.
  * @param {object} memberData { memberId, name, tier, points, serialNumber?, authenticationToken?, webServiceURL? }
- * @param {object} [opts] { passTypeIdentifier?, teamIdentifier?, templateDir? } — test-only overrides, never used in routes.
+ * @param {object} [opts] { passTypeIdentifier?, teamIdentifier?, templateDir?, artResolver? }
+ *   templateDir — test-only filesystem override. artResolver — async
+ *   (tier) => { assets, slots, missing }, injected in production to read
+ *   published art from Supabase Storage. Neither is set by routes.
  * @returns {Promise<{ buffer: Buffer, serialNumber: string, authenticationToken: string }>}
  */
 async function generatePass(memberData, opts = {}) {
@@ -189,7 +211,7 @@ async function generatePass(memberData, opts = {}) {
   }
 
   const pass = new PKPass(
-    loadTemplateAssets(opts.templateDir || templateDirForTier(memberData.tier)),
+    await resolveAssets(memberData, opts),
     {
       wwdr: loadFile(config.wwdrPath, 'WWDR cert'),
       signerCert: loadFile(config.signerCertPath, 'signer cert'),

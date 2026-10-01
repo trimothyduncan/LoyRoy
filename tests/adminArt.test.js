@@ -94,7 +94,10 @@ describe('POST /admin/publish-art', () => {
     expect(res.status).toBe(400);
   });
 
-  it('writes pass files and marks slots published', async () => {
+  // Publishing flips pass_art.status only. Rendering reads published rows from
+  // Supabase Storage (services/artService.js), so no file is written to disk —
+  // an ephemeral Render filesystem would lose it on the next deploy anyway.
+  it('marks slots published without writing to the filesystem', async () => {
     const { app, artBase, db } = setup({ 'pass-assets/gold-logo.png': Buffer.from('PNGDATA') });
     await auth(
       request(app).post('/admin/pass-art').send({ tier: 'gold', slot: 'logo', storagePath: 'pass-assets/gold-logo.png' })
@@ -102,15 +105,33 @@ describe('POST /admin/publish-art', () => {
     const res = await auth(request(app).post('/admin/publish-art').send({ tier: 'gold' }));
     expect(res.status).toBe(200);
     expect(res.body.published).toEqual([{ slot: 'logo', files: ['logo.png', 'logo@2x.png'] }]);
-    expect(fs.readFileSync(path.join(artBase, 'gold.pass', 'logo.png')).toString()).toBe('PNGDATA');
-    expect(fs.readFileSync(path.join(artBase, 'gold.pass', 'logo@2x.png')).toString()).toBe('PNGDATA');
     expect(db._tables.pass_art[0].status).toBe('published');
+    // Nothing written to disk — durable art lives in Storage.
+    expect(fs.existsSync(path.join(artBase, 'gold.pass'))).toBe(false);
+  });
+
+  // Without this the device's passesUpdatedSince poll returns nothing and an
+  // installed pass never learns to re-fetch the newly published art.
+  it('signals installed passes on the tier so devices re-fetch', async () => {
+    const { app, db } = setup({ 'pass-assets/gold-logo.png': Buffer.from('PNG') });
+    db._tables.members.push(
+      { id: 'm1', tier: 'gold', pass_serial: 'LOYROY-m1' },
+      { id: 'm2', tier: 'gold', pass_serial: 'LOYROY-m2' },
+      { id: 'm3', tier: 'silver', pass_serial: 'LOYROY-m3' }
+    );
+    await auth(
+      request(app).post('/admin/pass-art').send({ tier: 'gold', slot: 'logo', storagePath: 'pass-assets/gold-logo.png' })
+    );
+    const res = await auth(request(app).post('/admin/publish-art').send({ tier: 'gold' }));
+    expect(res.body.signalled).toBe(2);
+    const signalled = db._tables.pass_updates.map((p) => p.serial_number).sort();
+    expect(signalled).toEqual(['LOYROY-m1', 'LOYROY-m2']);
   });
 
   // Poster Generic (iOS 27+) slots. Filenames must match walletService
   // POSTER_ASSET_NAMES or the artwork never reaches the pass bundle.
   it('stages and publishes the posterGeneric artwork + primaryLogo slots', async () => {
-    const { app, artBase } = setup({
+    const { app, db } = setup({
       'pass-assets/art.png': Buffer.from('ARTWORK'),
       'pass-assets/plogo.png': Buffer.from('PLOGO'),
     });
@@ -131,8 +152,7 @@ describe('POST /admin/publish-art', () => {
       { slot: 'artwork', files: ['artwork.png'] },
       { slot: 'primaryLogo', files: ['primaryLogo.png'] },
     ]);
-    expect(fs.readFileSync(path.join(artBase, 'gold.pass', 'artwork.png')).toString()).toBe('ARTWORK');
-    expect(fs.readFileSync(path.join(artBase, 'gold.pass', 'primaryLogo.png')).toString()).toBe('PLOGO');
+    expect(db._tables.pass_art.map((r) => r.status)).toEqual(['published', 'published']);
   });
 
   it('rejects unknown slots', async () => {
