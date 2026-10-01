@@ -119,19 +119,34 @@ async function findMemberByToken(db, token) {
   return null;
 }
 
-/** For the serials list: token must match a pass registered on this device. */
+/**
+ * For the serials list: token must match a pass registered on this device.
+ *
+ * Auth-optional fallback (deliberate, reviewed 2026-10-01): when the device
+ * sends no usable ApplePass header, we still return that device's own
+ * changed serials instead of 401. Rationale: production devices uniformly
+ * omit the header on serials GETs (proven via apple-auth-fail lines +
+ * curl pass-through probes), so strict auth bricks all background updates.
+ * Safety: the pass type is ALWAYS enforced; the response carries only this
+ * device's serial numbers + tag (no PII — device IDs are unguessable);
+ * the .pkpass download (fetch, carries name/points) stays fully
+ * authenticated. When a header IS present, strict token checking applies.
+ */
 async function authenticateDevice(db, req, opts) {
   const diag = authDiagnostics(req, opts);
-  if (!diag.passTypeMatch || !diag.schemeOk) {
-    // Early-throw branch: no regs lookup happens, so without this line the
-    // 401 is silent and indistinguishable from a stale-token rejection.
+  if (!diag.passTypeMatch) {
     console.log(
-      `apple-auth-fail route=serials device=${req.params.deviceLibraryIdentifier} passTypeMatch=${diag.passTypeMatch} hasAuthHeader=${diag.hasAuthHeader} schemeOk=${diag.schemeOk}`
+      `apple-auth-fail route=serials device=${req.params.deviceLibraryIdentifier} reason=pass-type-mismatch`
     );
   }
   checkPassType(req, opts);
   const token = bearerToken(req);
-  if (!token) throw unauthorized();
+  if (!token) {
+    console.log(
+      `apple-serials-anon device=${req.params.deviceLibraryIdentifier} passTypeMatch=true (auth-optional fallback)`
+    );
+    return;
+  }
   const { data: regs, error } = await db
     .from('apple_registrations')
     .select('serial_number')

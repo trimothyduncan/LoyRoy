@@ -106,24 +106,48 @@ describe('Apple Wallet Web Service', () => {
     expect(res.status).toBe(200);
   });
 
-  it('serials/fetch 401s emit presence-only auth diagnostics (never token values)', async () => {
+  it('fetch without a header 401s with presence-only auth diagnostics (never token values)', async () => {
     const lines = [];
     const origLog = console.log;
     console.log = (...args) => lines.push(args.join(' '));
     try {
-      const noHeaderSerials = await request(app).get(`/apple/v1/devices/DEV-1/registrations/${PASS_TYPE}`);
-      expect(noHeaderSerials.status).toBe(401);
       const noHeaderFetch = await request(app).get(`/apple/v1/passes/${PASS_TYPE}/WS-1`);
       expect(noHeaderFetch.status).toBe(401);
     } finally {
       console.log = origLog;
     }
     const fails = lines.filter((l) => l.startsWith('apple-auth-fail'));
-    expect(fails.length).toBe(2);
+    expect(fails.length).toBe(1);
     expect(fails.join('\n')).not.toContain('secret-token');
-    expect(fails[0]).toContain('route=serials');
+    expect(fails[0]).toContain('route=fetch');
     expect(fails[0]).toContain('schemeOk=false');
-    expect(fails[1]).toContain('route=fetch');
-    expect(fails[1]).toContain('schemeOk=false');
+  });
+
+  it('serials without a header uses the auth-optional device-scoped fallback (never token values)', async () => {
+    await appleAuth(request(app).post(regPath)).send({ pushToken: 'push-abc' });
+    const lines = [];
+    const origLog = console.log;
+    console.log = (...args) => lines.push(args.join(' '));
+    let anon;
+    try {
+      anon = await request(app).get(`/apple/v1/devices/DEV-1/registrations/${PASS_TYPE}`);
+    } finally {
+      console.log = origLog;
+    }
+    expect(anon.status).toBe(200);
+    expect(anon.body.serialNumbers).toContain('WS-1');
+    const anonLines = lines.filter((l) => l.startsWith('apple-serials-anon'));
+    expect(anonLines.length).toBe(1);
+    expect(lines.join('\n')).not.toContain('secret-token');
+  });
+
+  it('serials still 401s on wrong pass type or a stale token', async () => {
+    await appleAuth(request(app).post(regPath)).send({ pushToken: 'push-abc' });
+    const badType = await appleAuth(request(app).get(`/apple/v1/devices/DEV-1/registrations/wrong.type`));
+    expect(badType.status).toBe(401);
+    const stale = await request(app)
+      .get(`/apple/v1/devices/DEV-1/registrations/${PASS_TYPE}`)
+      .set('Authorization', 'ApplePass wrong');
+    expect(stale.status).toBe(401);
   });
 });
