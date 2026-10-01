@@ -72,6 +72,12 @@ function createAppRouter({ db, wallet, push }) {
           tier: member.tier,
           points: member.points_balance,
           webServiceURL: webServiceURL(),
+          // Stable identity: re-issuing for a member that already has a pass
+          // reuses its serial + token so installed copies keep working.
+          // Every create-pass used to mint a fresh token (same serial),
+          // silently killing all installed copies (401 loop on next poll).
+          ...(member.pass_serial ? { serialNumber: member.pass_serial } : {}),
+          ...(member.auth_token ? { authenticationToken: member.auth_token } : {}),
         });
 
         await members.updateMemberPass(db, member.id, {

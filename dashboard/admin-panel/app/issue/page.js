@@ -7,9 +7,12 @@ const TIERS = ["bronze", "silver", "gold", "platinum", "vip"];
 export default function IssuePage() {
   const [form, setForm] = useState({ name: "", email: "", phone: "", tier: "bronze" });
   const [msg, setMsg] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   async function submit(e) {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     setMsg("Generating…");
     try {
       const res = await fetch("/api/loyroy/create-pass", {
@@ -39,6 +42,8 @@ export default function IssuePage() {
       setMsg(`Pass downloaded (${serial}). AirDrop or email it to an iPhone to install.`);
     } catch (err) {
       setMsg(`Error: ${err.message}`);
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -73,8 +78,12 @@ export default function IssuePage() {
             ))}
           </select>
         </label>
-        <button className="rounded bg-zinc-900 px-3 py-2 text-white" type="submit">
-          Generate & download .pkpass
+        <button
+          className="rounded bg-zinc-900 px-3 py-2 text-white disabled:opacity-50"
+          type="submit"
+          disabled={submitting}
+        >
+          {submitting ? "Generating…" : "Generate & download .pkpass"}
         </button>
       </form>
       {msg && <p className="mt-3 text-sm text-zinc-600">{msg}</p>}

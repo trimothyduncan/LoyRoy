@@ -10,8 +10,8 @@ const members = require('../database/members');
 const stubWallet = {
   generatePass: async (md) => ({
     buffer: Buffer.from('FAKEPKPASS'),
-    serialNumber: `LOYROY-${md.memberId}`,
-    authenticationToken: 'test-auth-token',
+    serialNumber: md.serialNumber || `LOYROY-${md.memberId}`,
+    authenticationToken: md.authenticationToken || 'test-auth-token',
   }),
 };
 const stubPush = { notifyPassUpdated: async () => ({ sent: false, reason: 'STUB' }) };
@@ -51,6 +51,22 @@ describe('POST /create-pass', () => {
     const res = await auth(request(app).post('/create-pass').send({ customerProfile: {} }));
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('re-issuing for the same member keeps serial and token stable (installed copies survive)', async () => {
+    const payload = { customerProfile: { name: 'Gus', email: 'g@x.co' }, tier: 'gold' };
+    const first = await auth(request(app).post('/create-pass').send(payload));
+    expect(first.status).toBe(200);
+    const memberId = first.headers['x-member-id'];
+    const before = await members.getMemberById(db, memberId);
+
+    const second = await auth(request(app).post('/create-pass').send(payload));
+    expect(second.status).toBe(200);
+    expect(second.headers['x-pass-serial']).toBe(before.pass_serial);
+
+    const after = await members.getMemberById(db, memberId);
+    expect(after.pass_serial).toBe(before.pass_serial);
+    expect(after.auth_token).toBe(before.auth_token);
   });
 });
 
