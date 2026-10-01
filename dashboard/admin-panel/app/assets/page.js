@@ -1,56 +1,35 @@
-"use client";
+import { backendJson } from "@/lib/backend";
+import ArtStudio from "@/components/ArtStudio";
 
-import { useState } from "react";
+export const dynamic = "force-dynamic";
 
-function toBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(",")[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-export default function AssetsPage() {
-  const [msg, setMsg] = useState("");
-  const [url, setUrl] = useState("");
-
-  async function onFile(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setMsg("Uploading…");
-    setUrl("");
-    try {
-      const dataBase64 = await toBase64(file);
-      const res = await fetch("/api/loyroy/admin/upload-asset", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: file.name, contentType: file.type, dataBase64 }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error?.message || `Upload failed (${res.status})`);
-      setUrl(data.publicUrl);
-      setMsg(`Uploaded to ${data.path}`);
-    } catch (err) {
-      setMsg(`Error: ${err.message}`);
-    }
+export default async function AssetsPage() {
+  let initialAssets = [];
+  let initialRows = [];
+  let loadError = "";
+  try {
+    const [a, r] = await Promise.all([
+      backendJson("/admin/assets"),
+      backendJson("/admin/pass-art"),
+    ]);
+    initialAssets = a.assets || [];
+    initialRows = r.art || [];
+  } catch (err) {
+    loadError = err.message;
   }
 
   return (
-    <main className="mx-auto max-w-md p-4 md:p-6">
-      <h1 className="v-title">Pass assets</h1>
-      <div className="v-card mt-4 p-4">
-        <p className="v-muted text-sm">
-          Upload icon/logo/strip art (PNG, JPEG, or WebP, ≤5MB). Files land in Supabase Storage via the backend.
-        </p>
-        <input className="v-input mt-3" type="file" accept="image/png,image/jpeg,image/webp" onChange={onFile} />
-        {msg && <p className="v-muted mt-3 text-sm">{msg}</p>}
-        {url && (
-          <p className="mt-2 text-sm">
-            Public URL: <a className="v-link" href={url}>{url}</a>
-          </p>
-        )}
-      </div>
+    <main className="mx-auto max-w-5xl p-4 md:p-6">
+      <h1 className="v-title">Art Studio</h1>
+      <p className="v-muted mt-1 text-sm">
+        Dress each tier in three steps: <strong>upload</strong> art, <strong>preview</strong> it on a sample pass,
+        then <strong>publish</strong>. Nothing reaches members until you publish.
+      </p>
+      {loadError ? (
+        <p className="mt-4 text-sm text-red-400">Backend error: {loadError}</p>
+      ) : (
+        <ArtStudio initialAssets={initialAssets} initialRows={initialRows} />
+      )}
     </main>
   );
 }

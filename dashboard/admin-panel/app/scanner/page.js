@@ -1,15 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
-// Redemption scanner: in-browser camera via html5-qrcode (covers webcam +
-// iPhone camera), plus plain keystroke input for HID hardware scanners.
-// Scans resolve through the backend (/redeem + member lookup).
+// Redemption scanner: in-browser camera via html5-qrcode (native
+// BarcodeDetector when the browser offers it — far more reliable on phones),
+// plus plain keystroke input for HID hardware scanners.
+// A successful scan opens the member profile, where points can be
+// added and pushes sent without touching the Members search.
 
 export default function ScannerPage() {
+  const router = useRouter();
   const readerRef = useRef(null);
   const scannerRef = useRef(null);
   const [cameraOn, setCameraOn] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [manual, setManual] = useState("");
   const [rewardId, setRewardId] = useState("");
   const [result, setResult] = useState("");
@@ -20,32 +25,40 @@ export default function ScannerPage() {
     };
   }, []);
 
-  async function redeemByMemberId(memberId) {
-    setResult("Looking up member…");
-    try {
-      const lookup = await fetch(`/api/loyroy/member/${encodeURIComponent(memberId)}`);
-      if (!lookup.ok) throw new Error("Member not found for this code");
-      const member = await lookup.json();
-      setResult(`${member.name} · ${member.tier} · ${member.pointsBalance} pts`);
-      if (rewardId.trim()) {
-        const res = await fetch("/api/loyroy/redeem", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ memberId, rewardId: rewardId.trim() }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data?.error?.message || `Redeem failed (${res.status})`);
-        setResult(`Redeemed ✓ New balance: ${data.newBalance}`);
-      }
-    } catch (err) {
-      setResult(`Error: ${err.message}`);
-    }
-  }
-
   function memberIdFromPayload(text) {
     // Pass QR encodes LOYROY-<memberId>; hardware scanners may append newline.
     const t = text.trim();
     return t.startsWith("LOYROY-") ? t.slice("LOYROY-".length).trim() : t;
+  }
+
+  function openProfile(memberId) {
+    if (!memberId) {
+      setResult("Error: could not read a member code from that scan.");
+      return;
+    }
+    router.push(`/members/${encodeURIComponent(memberId)}`);
+  }
+
+  async function redeemByMemberId(memberId) {
+    // Optional inline redeem: with a reward ID set, redeem first, then offer
+    // the profile. Without one, go straight to the profile.
+    if (!rewardId.trim()) {
+      openProfile(memberId);
+      return;
+    }
+    setResult("Redeeming…");
+    try {
+      const res = await fetch("/api/loyroy/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memberId, rewardId: rewardId.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error?.message || `Redeem failed (${res.status})`);
+      setResult(`Redeemed ✓ New balance: ${data.newBalance}`);
+    } catch (err) {
+      setResult(`Error: ${err.message}`);
+    }
   }
 
   async function toggleCamera() {
@@ -56,13 +69,20 @@ export default function ScannerPage() {
       return;
     }
     setResult("");
+    setStarting(true);
     try {
-      const { Html5Qrcode } = await import("html5-qrcode");
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
       const scanner = new Html5Qrcode("qr-reader");
       scannerRef.current = scanner;
       await scanner.start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
+        {
+          fps: 10,
+          qrbox: { width: 280, height: 280 },
+          disableFlip: false,
+          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        },
         (decoded) => {
           scanner.clear().catch(() => {});
           scannerRef.current = null;
@@ -72,8 +92,11 @@ export default function ScannerPage() {
         () => {}
       );
       setCameraOn(true);
+      setResult("Point at the pass QR — it opens the member on first read.");
     } catch (err) {
       setResult(`Camera error: ${err.message || err}. Use manual entry below.`);
+    } finally {
+      setStarting(false);
     }
   }
 
@@ -105,7 +128,7 @@ export default function ScannerPage() {
       <h1 className="v-title">Redeem scanner</h1>
       <div className="v-card mt-4 flex flex-col gap-3 p-4">
         <label className="flex flex-col gap-1 text-sm">
-          Reward ID (optional — leave empty for lookup only)
+          Reward ID (optional — leave empty to just open the member)
           <input
             className="v-input"
             value={rewardId}
@@ -114,8 +137,8 @@ export default function ScannerPage() {
           />
         </label>
         <div>
-          <button className="v-btn" onClick={toggleCamera}>
-            {cameraOn ? "Stop camera" : "Scan with camera"}
+          <button className="v-btn" onClick={toggleCamera} disabled={starting}>
+            {starting ? "Starting camera…" : cameraOn ? "Stop camera" : "Scan with camera"}
           </button>
         </div>
         <div id="qr-reader" ref={readerRef} className="w-full" />
@@ -137,6 +160,9 @@ export default function ScannerPage() {
           </button>
         </form>
         {result && <p className="text-sm">{result}</p>}
+        {result.startsWith("Redeemed") && (
+          <p className="v-muted text-sm">Tip: scan again without a reward ID to open the member profile.</p>
+        )}
       </div>
     </main>
   );

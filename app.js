@@ -26,7 +26,7 @@ function lazyDb() {
   );
 }
 
-function createApp({ db, wallet, push, passTypeIdentifier } = {}) {
+function createApp({ db, wallet, push, passTypeIdentifier, storage, artBase } = {}) {
   const app = express();
   const database = db || lazyDb();
   const walletService = wallet || require('./services/walletService');
@@ -45,7 +45,7 @@ function createApp({ db, wallet, push, passTypeIdentifier } = {}) {
   app.use('/apple', createAppleRouter({ db: database, wallet: walletService, passTypeIdentifier }));
 
   app.use(serviceAuth);
-  app.use(createAdminRouter());
+  app.use(createAdminRouter({ db: database, storage, artBase }));
   app.use(createAnalyticsRouter({ db: database }));
   app.use(
     createAppRouter({
