@@ -48,3 +48,19 @@ Do not claim a tool can modify infrastructure unless its schema/permissions conf
 
 ## Principle
 Tools provide capability. Markdown files provide policy and procedure.
+
+## One CLI (`one`)
+
+Installed globally on this machine (`@withone/cli`, binary `one`). Connects AI agents
+to 750+ third-party platforms (Gmail, Slack, Shopify, HubSpot, Stripe, GitHub,
+Render, etc.) through their APIs.
+
+- Whenever a task needs a third-party platform or external service, prefer `one`
+  over ad-hoc scripts: `one list` -> `one actions find <platform> <intent>` (read the
+  docs) -> `one actions execute <platform> <id> <key>`.
+- `one init` / `one add <platform>` / `one login` require an interactive terminal
+  (browser OAuth); they fail in non-interactive agent sessions. The human runs those;
+  the agent uses the already-connected platforms.
+- Never print, log, or commit platform credentials or connection secrets.
+- This registry entry is the project's standing instruction to use `one` for
+  external-service work in all future sessions.

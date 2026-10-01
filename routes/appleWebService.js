@@ -79,6 +79,30 @@ async function authenticatePass(db, req, opts) {
   return member;
 }
 
+/**
+ * Token-wide lookup: does this ApplePass token belong to ANY known member?
+ * Used only for idempotent DELETEs of already-unknown serials (deleted passes):
+ * a token-bearing client proves legitimacy, so removing a non-existent registration
+ * is a no-op 200 instead of a 401 that iOS retries forever. Never used for reads —
+ * serials/fetch stay strictly serial-scoped so one member's token reveals nothing else.
+ * Tokens are compared server-side only and never logged.
+ */
+async function findMemberByToken(db, token) {
+  if (!token) return null;
+  const { data, error } = await db.from('members').select('id,pass_serial,auth_token').eq('auth_token', token);
+  if (error) {
+    const err = new Error(`database: ${error.message}`);
+    err.status = 500;
+    err.code = 'DB_ERROR';
+    throw err;
+  }
+  const rows = Array.isArray(data) ? data : data ? [data] : [];
+  for (const m of rows) {
+    if (m && m.auth_token && tokensEqual(token, m.auth_token)) return m;
+  }
+  return null;
+}
+
 /** For the serials list: token must match a pass registered on this device. */
 async function authenticateDevice(db, req, opts) {
   checkPassType(req, opts);
@@ -153,12 +177,30 @@ function createAppleRouter({ db, wallet, passTypeIdentifier } = {}) {
     }
   );
 
-  // Unregister a device for a pass.
+  // Unregister a device for a pass. Idempotent: a valid-token DELETE for an
+  // already-unknown serial (deleted pass) is a no-op 200 so devices stop
+  // retrying; unknown tokens still 401.
   router.delete(
     '/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber',
     async (req, res, next) => {
       try {
-        await authenticatePass(db, req, opts);
+        try {
+          await authenticatePass(db, req, opts);
+        } catch (err) {
+          if (!err || err.status !== 401) throw err;
+          checkPassType(req, opts);
+          const known = await findMemberByToken(db, bearerToken(req));
+          if (!known) throw err;
+          await unregisterAppleDevice(db, {
+            deviceLibraryId: req.params.deviceLibraryIdentifier,
+            passTypeId: req.params.passTypeIdentifier,
+            serialNumber: req.params.serialNumber,
+          });
+          console.log(
+            `apple-unregister serial=${req.params.serialNumber} device=${req.params.deviceLibraryIdentifier} 200 idempotent`
+          );
+          return res.status(200).end();
+        }
         await unregisterAppleDevice(db, {
           deviceLibraryId: req.params.deviceLibraryIdentifier,
           passTypeId: req.params.passTypeIdentifier,
@@ -185,7 +227,13 @@ function createAppleRouter({ db, wallet, passTypeIdentifier } = {}) {
           req.params.deviceLibraryIdentifier,
           req.query.passesUpdatedSince
         );
-        if (serialNumbers.length === 0) return res.status(204).end();
+        if (serialNumbers.length === 0) {
+          console.log(`apple-serials device=${req.params.deviceLibraryIdentifier} count=0 204`);
+          return res.status(204).end();
+        }
+        console.log(
+          `apple-serials device=${req.params.deviceLibraryIdentifier} count=${serialNumbers.length} 200`
+        );
         res.json({ serialNumbers, lastUpdated });
       } catch (err) {
         next(err);
@@ -200,6 +248,7 @@ function createAppleRouter({ db, wallet, passTypeIdentifier } = {}) {
       const lastModified = member.updated_at ? new Date(member.updated_at) : new Date();
       const ifModifiedSince = req.headers['if-modified-since'];
       if (ifModifiedSince && lastModified <= new Date(ifModifiedSince)) {
+        console.log(`apple-fetch serial=${member.pass_serial} 304`);
         return res.status(304).end();
       }
       const base = (process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');

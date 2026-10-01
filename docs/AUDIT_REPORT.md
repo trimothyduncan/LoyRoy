@@ -182,3 +182,118 @@ Local `.env` file exists but was **not read** (policy + `opencode.json` deny). `
 - [x] migration/reset strategy exists (incremental; no destructive action)
 
 Gate judgment: audit COMPLETE as a repository audit; live-infrastructure verification remains open and must precede any staging/production gate.
+
+## Phase 1 verification addendum (2026-09-30, branch `refactor/phase1-env-foundation`)
+
+Read-only verification only. No app code modified, no infra changed, no credentials rotated,
+no migrations, no production actions, no secret values exposed/printed/committed.
+Checkpoint: commit `8fca1c3` + tag `audit-baseline-2026-09-30` (local only, not pushed).
+Working tree was clean at checkpoint; this addendum + matrix/ledger updates are the only delta since.
+
+### Supabase live-state findings
+
+- File-based verification only (no Supabase API capability in session; MCP resource lists empty).
+- `database/schema.sql`: 9 tables (tiers/members/points_ledger/visits/rewards/redemptions/devices/apple_devices/apple_registrations/pass_updates), FKs + checks + indexes present, RLS deliberately absent (service-role backend-only). No migrations directory.
+- Consumption: `database/db.js` reads `SUPABASE_URL`/`SUPABASE_SERVICE_KEY` lazily (`DB_CONFIG_ERROR` only on touch); `storageService.js` adds `SUPABASE_STORAGE_BUCKET`. No other Supabase consumers.
+- Presence-only signal: `node scripts/smoke.js` reached the DB layer (`DB_ERROR` on bogus uuid instead of `DB_CONFIG_ERROR`), confirming local Supabase vars are set — values never inspected.
+- `scripts/db-roundtrip.js` + `/admin/diag-supabase` (host/row-count/error-prefix only) remain the approved functional probes; db-roundtrip was NOT run (it writes test rows — prohibited this phase).
+- Live project tables/RLS/auth/storage/functions: still UNKNOWN. The pre-existing `RUNBOOK.md` (in history at `a01c877`) documents the intended flow: apply `schema.sql` in a fresh project, then db-roundtrip.
+
+### Render live-state findings
+
+- Blueprint verification only (no Render API capability in session).
+- `render.yaml`: `loyroy-api` (`npm install` / `node app.js`, health `/health`, 16 env keys) + `loyroy-admin` (`cd dashboard/admin-panel && npm install && npm run build` / `npm start`, 6 env keys). No staging service; pipeline is local -> production.
+- `APNS_TOPIC` and `APNS_USE_SANDBOX` are absent from the blueprint (fallback-dependent: topic falls back to `PASS_TYPE_IDENTIFIER`, sandbox defaults off/production). Either declare them or document the fallback as intentional before push verification.
+- `SERVICE_API_KEY` is `generateValue:true` on api but `sync:false` (manual copy) on admin — desync yields admin 502/401 or backend 401 with no code change. Copy procedure must be documented/runbooked.
+- `SIGNER_*_PATH`/`APNS_KEY_PATH` values point at `./certificates/...` (absent on Render); `config.js` `resolveCertPath` basename-fallback to `/etc/secrets` compensates — but only when basenames match what was uploaded as secret files.
+- Live deploy state/logs/domains/env presence: still UNKNOWN.
+
+### Environment-variable discrepancies (verified)
+
+- Per-service consumption mapped in `docs/ENVIRONMENT_MATRIX.md` (api: 18 names; admin: 2 server + 3 public + NODE_ENV; 8 documented-but-unreferenced names).
+- Canonical mismatches confirmed and PRESERVED (no code renames): `SUPABASE_SERVICE_KEY`, `PASS_TYPE_IDENTIFIER`, `PUBLIC_BASE_URL`/`BACKEND_URL`, cert-file model. Mapping documented in matrix; future rename must be alias-then-cutover.
+- Redundant `env.example` was byte-identical to `.env.example` (`cmp` → IDENTICAL) and has been removed (`git rm env.example`). Single canonical example remains: `.env.example` (root) + `dashboard/admin-panel/.env.example` (admin).
+- Local discrepancy (presence-only): resolved `APNS_KEY_PATH` targets `AuthKey_H569J8DH3N.p8` (missing) while `certificates/` holds `AuthKey_JNLUR8WY7U.p8` (257 B) — filename key-IDs differ. Local APNs sends would fail safe via `notifyPassUpdated` report path (never throws; writes unaffected). Align PATH or file before any APNs device test; same mismatch class as the Render secret-file problem below.
+- `.nvmrc` pins Node 22 (CI matches); local ran 26.8.1 clean — no action, noted.
+
+### Root cause of the existing Render configuration problem
+
+Determinable from repo evidence (git history + code + blueprint, no live API needed).
+The deployment failures were secret-file path mismatches compounded by blind spots, in order:
+
+1. Primary: Render mounts secret files at `/etc/secrets/<basename>`, but `SIGNER_*_PATH`/`APNS_KEY_PATH` defaulted to `./certificates/...`, which does not exist on Render. Any fresh Render deploy without corrected paths failed pass signing/push with file errors. Fixed in code by the `resolveCertPath` basename fallback (commits `8f20cdd`, `97a783b`); blind spot closed by diag reporting effective paths + existence + byte sizes (commits `f911279`, `cf5d622`, `5a6fd3e`) and CI-safe `PASS_FILE_ERROR` (`65909f1`).
+2. Secondary (still open): `SERVICE_API_KEY` generated on api only; admin requires a manual identical copy. Nothing in the blueprint enforces or verifies the match.
+3. Tertiary (latent): canonical-schema vs code naming drift tempts operators to set the wrong name (e.g. `SUPABASE_SERVICE_ROLE_KEY` instead of the consumed `SUPABASE_SERVICE_KEY`), producing a "set but not read" failure. Matrix mapping now documents the consumed names.
+
+### Changes made (this phase)
+
+- Git: branch `refactor/phase1-env-foundation`, commit `8fca1c3`, tag `audit-baseline-2026-09-30` (local only).
+- Removed redundant `env.example` (identical duplicate confirmed by `cmp`).
+- Rewrote `docs/ENVIRONMENT_MATRIX.md` with verified per-service consumption, declaration-vs-live status, and compat policy.
+- Updated `agent/TASK_LEDGER.md` (AUDIT-001 DONE, ENV-001 DONE for docs-level scope with blockers noted).
+- This addendum. No application code touched; Apple Wallet implementation untouched.
+
+### Changes deliberately NOT made
+
+### Live Render verification addendum (2026-09-30, via One CLI — read-only, key names + statuses only)
+
+- Services: `loyroy-admin` + `loyroy-api` match the blueprint; third service `LoyRoy`
+  (`srv-dakbtlnqj5pc73ak2l3g`) is NOT in `render.yaml` — same repo/branch, api-style start command,
+  zero env vars, no health check. With no `SERVICE_API_KEY`/`SUPABASE_*`/signing vars it can only
+  answer `/health` and `/apple/v1/log`; every authenticated/DB/signing route 500s by design.
+  Recommendation: suspend or delete the duplicate ONLY with explicit approval (destructive action),
+  after confirming nothing (DNS, dashboard `BACKEND_URL`, scanners) points at `loyroy.onrender.com`.
+- Deploys: all live on `a01c877` (= local `main` HEAD); history shows orderly supersedes, no stuck failure.
+- Env keys live match `render.yaml` exactly on both blueprint services (api 16, admin 6);
+  `APNS_TOPIC`/`APNS_USE_SANDBOX` confirmed absent (fallback path active).
+- Health: `loyroy-api` serving steady `GET /health 200` to Render's checker.
+- The earlier file-path root cause (E.1) is confirmed mitigated live: api has all four `*_PATH` keys
+  set and the service is healthy. Remaining live risks: legacy duplicate service, manual
+  `SERVICE_API_KEY` copy between api/admin, and `APNS_KEY_PATH` basename correctness on Render
+  (secret-file byte-sizes checkable via `/admin/diag-supabase` when needed).
+- Supabase live state remains unverified (no Supabase tool connection); unchanged probe path applies.
+
+### Points-not-updating incident (2026-10-01) — root cause + correction
+
+- Symptom: issued pass (LOYROY-6d16…) never reflected added points.
+- Server evidence (Render logs): register 201, update-points 200 ×2, APNs pushes delivered 1/1 ×2.
+  Server write path correct. `addPoints` bumps `updated_at`, `touchPassUpdate` writes — 304-stale theory ruled out.
+- Device evidence (`/apple/v1/log`): `Get serial #s ... 401` and endless
+  `Unregister task ... LOYROY-8fd2… : Authentication failure`. The iPhone holds a stale/deleted
+  pass (8fd2…) whose token matches nothing server-side, poisoning serials polling so the new pass
+  never pulls updates. Fix user-side: delete ALL LoyRoy passes from Wallet, re-issue exactly one.
+- Code fixes on branch (58/58 tests, lint clean, NOT YET DEPLOYED — needs merge/push approval):
+  1. Idempotent unregister: valid-token DELETE for an unknown serial → 200 (was 401), ending
+     iOS's infinite Authentication-failure retry loop. Unknown tokens still 401; reads unchanged.
+  2. Observability: `apple-serials ... 200/204` and `apple-fetch ... 304` server lines (200 fetch
+     already logged) so the next diagnosis is never blind.
+- CORRECTION — wrong-database disclosure: the Phase 2 schema/002/`wallet-pass` work targeted
+  Supabase project `qaltolfe…` (the only project visible to the `one` connection), but the diag
+  endpoint proves the app runs on `clepxujvgyhdahwhpsmx.supabase.co` — a project the `one` token
+  cannot see (`Forbidden`). That work was harmless (empty project) but did NOT serve the app.
+  The app's real database evidently already had the pilot schema (all flows 200/201).
+  Redo pack (not executed): `database/migrations/APPLY-TO-REAL-PROJECT.sql` — one idempotent file
+  (001 + bucket + 002) to paste into the real project's SQL editor, since I have no API path to it.
+
+### Live Supabase verification addendum (2026-10-01, via One CLI — read-only SELECTs only; see correction above: this verified the WRONG project `qaltolfe…`, not the app database)
+
+- Project `qaltolfejxgazwuxwnpr`, us-east-1, ACTIVE_HEALTHY. **0 tables in `public` — the schema was never
+  applied.** Only system schemas exist (auth/realtime/storage/vault). 0 storage buckets, 0 auth users.
+- Live `loyroy-api` is therefore up but dataless: every DB-backed route fails `DB_ERROR` today.
+- Approval-gated next step (Phase 2): apply `database/schema.sql`, create the storage bucket named by
+  `SUPABASE_STORAGE_BUCKET`, verify with `db-roundtrip` + diag endpoint. No writes were made in this phase.
+- RESOLVED 2026-10-01 (Phase 2, authorized): schema applied to the empty project in ordered chunks
+  (additive only — 0 tables/rows/users existed beforehand). Verified: 10 public tables, 5 tier seeds,
+  insert -> points_ledger -> balance update -> cascade delete roundtrip with 0 rows remaining.
+  Migration record: `database/migrations/001-initial-schema-record.sql`. Open: storage bucket creation,
+  multi-tenant extension + RLS (proposal below, approval required before data-layer changes).
+
+### Changes deliberately NOT made (continued)
+
+- No renames of `SUPABASE_SERVICE_KEY`, `PASS_TYPE_IDENTIFIER`, `PUBLIC_BASE_URL`/`BACKEND_URL`, or cert-file model (would break working services; compat preserved).
+- No `.env.example` content edits; no `.env`/secret reads; no credential rotation.
+- No migrations (`scripts/db-roundtrip.js` not run), no production changes, no staging service creation.
+- No dashboard `firebase-admin` ID-token verification (tracked TODO in proxy route; Phase 6–8 scope).
+- No Google Wallet work; no Apple logic changes; no functionality removed.
+- No push to origin (checkpoint/tag local only).
+- `opencode.json` still references deleted root docs (`PROJECT_PLAN.md` etc.) — pre-existing drift, out of Phase 1 env scope, noted for a later docs pass.

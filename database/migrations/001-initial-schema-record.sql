@@ -1,0 +1,12 @@
+-- Migration 001: initial schema (single-tenant pilot).
+-- Source of truth: database/schema.sql (idempotent: IF NOT EXISTS + ON CONFLICT DO NOTHING).
+-- Applied 2026-10-01 to Supabase project qaltolfejxgazwuxwnpr (us-east-1) via Management API
+-- in 4 ordered chunks (tiers+seed / members / ledger+visits / rewards+redemptions /
+-- devices+apple+pass_updates). Project had 0 public tables beforehand: purely additive, no data touched.
+-- Verified same day: 10 public tables present, tiers seeded (5 rows), insert -> ledger -> delete
+-- roundtrip with cascade cleanup (0 rows remaining). RLS intentionally absent (service-role
+-- backend-only, matching current backend design); multi-tenant tables + RLS are a later migration.
+-- Rollback: drop the 10 public tables in reverse dependency order (no production data existed).
+-- CORRECTION 2026-10-01: this went to the WRONG project (the only one visible to tooling).
+-- The app database (host clepxujvgyhdahwhpsmx.supabase.co, per /admin/diag-supabase) is a
+-- different, unreachable-via-API project. Use APPLY-TO-REAL-PROJECT.sql there instead.
