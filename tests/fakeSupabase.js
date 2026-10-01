@@ -22,9 +22,13 @@ function createFakeDb() {
   let seq = 0;
   const now = () => new Date().toISOString();
 
+  // Production ids are uuid columns (see database/schema.sql), so the fake
+  // must mint uuid-shaped ids or id-validation paths are never exercised.
+  const uuid = () => `00000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
+
   function defaults(table, row) {
     const r = { ...row };
-    if (r.id === undefined) r.id = `${table}-${++seq}`;
+    if (r.id === undefined) r.id = uuid();
     if (table === 'members') {
       r.points_balance ??= 0;
       r.tier ??= 'bronze';

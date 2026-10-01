@@ -48,8 +48,19 @@ async function createMember(db, { name, email, phone, tier = 'bronze' }) {
   return data;
 }
 
+// members.id is a uuid column. PostgREST passes the value straight to Postgres,
+// so a non-uuid (e.g. a hand-typed "C001" or a stale sample-pass id) makes the
+// cast fail and surfaces as a 500. Reject it as a 404 before querying — a
+// malformed id can never match a row, so "not found" is the truthful answer.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value) {
+  return typeof value === 'string' && UUID_RE.test(value.trim());
+}
+
 async function getMemberById(db, id) {
   db = withDb(db);
+  if (!isUuid(id)) throw notFound('Member');
   const { data, error } = await db.from('members').select('*').eq('id', id).maybeSingle();
   if (error) throw dbError(error);
   if (!data) throw notFound('Member');
@@ -216,6 +227,7 @@ module.exports = {
   createMember,
   getMemberById,
   getMemberBySerial,
+  isUuid,
   resolveMember,
   updateMemberPass,
   addPoints,

@@ -18,6 +18,7 @@ export default function ScannerPage() {
   const [manual, setManual] = useState("");
   const [rewardId, setRewardId] = useState("");
   const [result, setResult] = useState("");
+  const [misses, setMisses] = useState(0);
 
   useEffect(() => {
     return () => {
@@ -30,6 +31,15 @@ export default function ScannerPage() {
     const t = text.trim();
     return t.startsWith("LOYROY-") ? t.slice("LOYROY-".length).trim() : t;
   }
+
+  // Diagnostic state: the error callback fires on every missed frame, so only
+  // surface a count + last reason instead of raw per-frame noise.
+  const bumpMiss = () =>
+    setMisses((m) => {
+      const next = m + 1;
+      if (next === 30) setResult("Camera is live but nothing is decoding yet — widen the frame and hold steady on the pass QR.");
+      return next;
+    });
 
   function openProfile(memberId) {
     if (!memberId) {
@@ -69,19 +79,27 @@ export default function ScannerPage() {
       return;
     }
     setResult("");
+    setMisses(0);
     setStarting(true);
     try {
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
-      const scanner = new Html5Qrcode("qr-reader");
+      // formatsToSupport / experimentalFeatures are read ONLY from the
+      // constructor's second arg. Passing them to start() is silently ignored
+      // and leaves the decoder on all 16 formats with BarcodeDetector-first.
+      const scanner = new Html5Qrcode("qr-reader", {
+        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      });
       scannerRef.current = scanner;
       await scanner.start(
         { facingMode: "environment" },
         {
           fps: 10,
-          qrbox: { width: 280, height: 280 },
-          disableFlip: false,
-          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+          // No fixed qrbox: the sample region becomes the full viewfinder, so a
+          // Wallet QR outside a 280px window still decodes.
+          // disableFlip must stay true — the flip retry never resets the canvas
+          // transform, so repeated misses leave the sampled region mirrored.
+          disableFlip: true,
         },
         (decoded) => {
           scanner.clear().catch(() => {});
@@ -89,12 +107,12 @@ export default function ScannerPage() {
           setCameraOn(false);
           redeemByMemberId(memberIdFromPayload(decoded));
         },
-        () => {}
+        () => bumpMiss()
       );
       setCameraOn(true);
       setResult("Point at the pass QR — it opens the member on first read.");
     } catch (err) {
-      setResult(`Camera error: ${err.message || err}. Use manual entry below.`);
+      setResult(`Camera error: ${err?.message || err}. Use manual entry below.`);
     } finally {
       setStarting(false);
     }
@@ -160,6 +178,11 @@ export default function ScannerPage() {
           </button>
         </form>
         {result && <p className="text-sm">{result}</p>}
+        {cameraOn && misses > 0 && (
+          <p className="v-muted text-xs">
+            Scanning — {misses} frame{misses === 1 ? "" : "s"} with no code in view yet.
+          </p>
+        )}
         {result.startsWith("Redeemed") && (
           <p className="v-muted text-sm">Tip: scan again without a reward ID to open the member profile.</p>
         )}

@@ -11,8 +11,10 @@ const path = require('node:path');
 const { generatePass } = require('../services/walletService');
 
 async function main() {
+  // members.id is a uuid column — a short id like "C001" produces a pass whose
+  // QR the scanner resolves to a member that can never exist.
   const { buffer, serialNumber } = await generatePass({
-    memberId: 'C001',
+    memberId: process.env.SAMPLE_MEMBER_ID || '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
     name: 'Jane Appleseed',
     tier: 'gold',
     points: 1250,

@@ -40,6 +40,19 @@ describe('members round-trip', () => {
     await expect(members.addPoints(db, m.id, 1.5, 'x')).rejects.toMatchObject({ status: 400 });
     await expect(members.getMemberById(db, 'missing')).rejects.toMatchObject({ status: 404 });
   });
+
+  // members.id is a uuid column: a non-uuid used to reach Postgres and fail the
+  // cast, which dbError() reported as a 500 instead of a 404.
+  it('rejects a non-uuid member id as 404, not 500', async () => {
+    for (const bad of ['C001', '', 'not-a-uuid', '12345']) {
+      await expect(members.getMemberById(db, bad)).rejects.toMatchObject({
+        status: 404,
+        code: 'NOT_FOUND',
+      });
+    }
+    expect(members.isUuid('C001')).toBe(false);
+    expect(members.isUuid('3f2504e0-4f89-41d3-9a0c-0305e82c3301')).toBe(true);
+  });
 });
 
 describe('redeem', () => {
