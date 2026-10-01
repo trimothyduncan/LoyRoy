@@ -105,4 +105,25 @@ describe('Apple Wallet Web Service', () => {
     const res = await request(app).post('/apple/v1/log').send({ logs: ['test log line'] });
     expect(res.status).toBe(200);
   });
+
+  it('serials/fetch 401s emit presence-only auth diagnostics (never token values)', async () => {
+    const lines = [];
+    const origLog = console.log;
+    console.log = (...args) => lines.push(args.join(' '));
+    try {
+      const noHeaderSerials = await request(app).get(`/apple/v1/devices/DEV-1/registrations/${PASS_TYPE}`);
+      expect(noHeaderSerials.status).toBe(401);
+      const noHeaderFetch = await request(app).get(`/apple/v1/passes/${PASS_TYPE}/WS-1`);
+      expect(noHeaderFetch.status).toBe(401);
+    } finally {
+      console.log = origLog;
+    }
+    const fails = lines.filter((l) => l.startsWith('apple-auth-fail'));
+    expect(fails.length).toBe(2);
+    expect(fails.join('\n')).not.toContain('secret-token');
+    expect(fails[0]).toContain('route=serials');
+    expect(fails[0]).toContain('schemeOk=false');
+    expect(fails[1]).toContain('route=fetch');
+    expect(fails[1]).toContain('schemeOk=false');
+  });
 });

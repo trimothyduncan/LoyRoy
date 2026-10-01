@@ -62,6 +62,22 @@ function tokensEqual(a, b) {
   return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
 }
 
+/**
+ * Presence-only auth diagnostics for 401 investigations. Returns booleans —
+ * never the header, token, or any secret-adjacent value — so failure lines
+ * can distinguish "wrong pass type" from "missing/malformed ApplePass
+ * header" from "stale token" (the latter keeps its existing regs=N line).
+ */
+function authDiagnostics(req, opts) {
+  const header = req.headers.authorization || '';
+  const expected = expectedPassType(opts);
+  return {
+    hasAuthHeader: header.length > 0,
+    schemeOk: header.startsWith('ApplePass '),
+    passTypeMatch: Boolean(expected) && req.params.passTypeIdentifier === expected,
+  };
+}
+
 /** Load member by serial and verify the ApplePass token. Returns the member. */
 async function authenticatePass(db, req, opts) {
   checkPassType(req, opts);
@@ -105,6 +121,14 @@ async function findMemberByToken(db, token) {
 
 /** For the serials list: token must match a pass registered on this device. */
 async function authenticateDevice(db, req, opts) {
+  const diag = authDiagnostics(req, opts);
+  if (!diag.passTypeMatch || !diag.schemeOk) {
+    // Early-throw branch: no regs lookup happens, so without this line the
+    // 401 is silent and indistinguishable from a stale-token rejection.
+    console.log(
+      `apple-auth-fail route=serials device=${req.params.deviceLibraryIdentifier} passTypeMatch=${diag.passTypeMatch} hasAuthHeader=${diag.hasAuthHeader} schemeOk=${diag.schemeOk}`
+    );
+  }
   checkPassType(req, opts);
   const token = bearerToken(req);
   if (!token) throw unauthorized();
@@ -268,6 +292,12 @@ function createAppleRouter({ db, wallet, passTypeIdentifier } = {}) {
       });
       res.send(buffer);
     } catch (err) {
+      if (err.status === 401) {
+        const diag = authDiagnostics(req, opts);
+        console.log(
+          `apple-auth-fail route=fetch serial=${req.params.serialNumber} passTypeMatch=${diag.passTypeMatch} hasAuthHeader=${diag.hasAuthHeader} schemeOk=${diag.schemeOk}`
+        );
+      }
       next(err);
     }
   });
