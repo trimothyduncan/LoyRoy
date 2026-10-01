@@ -9,6 +9,7 @@ const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { serviceAuth } = require('./middleware/serviceAuth');
 const { createAppRouter } = require('./routes/appApi');
 const { createAdminRouter } = require('./routes/admin');
+const { createAnalyticsRouter } = require('./routes/analytics');
 const { createAppleRouter } = require('./routes/appleWebService');
 
 // Lazy DB proxy: the server boots without credentials; only code paths that
@@ -45,6 +46,7 @@ function createApp({ db, wallet, push, passTypeIdentifier } = {}) {
 
   app.use(serviceAuth);
   app.use(createAdminRouter());
+  app.use(createAnalyticsRouter({ db: database }));
   app.use(
     createAppRouter({
       db: database,

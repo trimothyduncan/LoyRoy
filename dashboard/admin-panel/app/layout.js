@@ -32,6 +32,7 @@ export default function RootLayout({ children }) {
             <Link className="hover:underline" href="/issue">Issue pass</Link>
             <Link className="hover:underline" href="/scanner">Scanner</Link>
             <Link className="hover:underline" href="/assets">Assets</Link>
+            <Link className="hover:underline" href="/analytics">Analytics</Link>
           </nav>
         </header>
         <AuthGate>{children}</AuthGate>
