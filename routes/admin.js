@@ -8,13 +8,19 @@ const { validate } = require('../middleware/validate');
 const { uploadPassAsset, MAX_BYTES } = require('../services/storageService');
 
 const ART_TIERS = ['bronze', 'silver', 'gold', 'platinum', 'vip'];
-const ART_SLOTS = ['logo', 'strip', 'icon'];
+// logo/strip/icon feed the legacy storeCard face; artwork/primaryLogo feed the
+// Poster Generic face (iOS 27+). Kept in sync with the pass_art.slot CHECK
+// constraint — see database/migrations/004-poster-art.sql.
+const ART_SLOTS = ['logo', 'strip', 'icon', 'artwork', 'primaryLogo'];
 // Pass package filenames each studio slot feeds. Kept in sync with
-// walletService TEMPLATE_ASSET_NAMES.
+// walletService TEMPLATE_ASSET_NAMES + POSTER_ASSET_NAMES.
 const SLOT_FILES = {
   logo: ['logo.png', 'logo@2x.png'],
   strip: ['strip.png'],
   icon: ['icon.png', 'icon@2x.png'],
+  // Full-bleed poster background (358x448pt) and the logo drawn over it.
+  artwork: ['artwork.png'],
+  primaryLogo: ['primaryLogo.png'],
 };
 
 function artBaseDir(artBase) {

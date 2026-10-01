@@ -106,4 +106,40 @@ describe('POST /admin/publish-art', () => {
     expect(fs.readFileSync(path.join(artBase, 'gold.pass', 'logo@2x.png')).toString()).toBe('PNGDATA');
     expect(db._tables.pass_art[0].status).toBe('published');
   });
+
+  // Poster Generic (iOS 27+) slots. Filenames must match walletService
+  // POSTER_ASSET_NAMES or the artwork never reaches the pass bundle.
+  it('stages and publishes the posterGeneric artwork + primaryLogo slots', async () => {
+    const { app, artBase } = setup({
+      'pass-assets/art.png': Buffer.from('ARTWORK'),
+      'pass-assets/plogo.png': Buffer.from('PLOGO'),
+    });
+
+    for (const [slot, storagePath] of [
+      ['artwork', 'pass-assets/art.png'],
+      ['primaryLogo', 'pass-assets/plogo.png'],
+    ]) {
+      const res = await auth(
+        request(app).post('/admin/pass-art').send({ tier: 'gold', slot, storagePath })
+      );
+      expect(res.status).toBe(200);
+    }
+
+    const res = await auth(request(app).post('/admin/publish-art').send({ tier: 'gold' }));
+    expect(res.status).toBe(200);
+    expect(res.body.published).toEqual([
+      { slot: 'artwork', files: ['artwork.png'] },
+      { slot: 'primaryLogo', files: ['primaryLogo.png'] },
+    ]);
+    expect(fs.readFileSync(path.join(artBase, 'gold.pass', 'artwork.png')).toString()).toBe('ARTWORK');
+    expect(fs.readFileSync(path.join(artBase, 'gold.pass', 'primaryLogo.png')).toString()).toBe('PLOGO');
+  });
+
+  it('rejects unknown slots', async () => {
+    const { app } = setup({ 'pass-assets/x.png': Buffer.from('X') });
+    const res = await auth(
+      request(app).post('/admin/pass-art').send({ tier: 'gold', slot: 'banner', storagePath: 'pass-assets/x.png' })
+    );
+    expect(res.status).toBe(400);
+  });
 });

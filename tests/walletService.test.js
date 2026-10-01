@@ -47,6 +47,21 @@ describe('buildPassJson', () => {
   it('rejects missing memberId with a 400 error', () => {
     expect(() => buildPassJson({})).toThrow(expect.objectContaining({ status: 400 }));
   });
+
+  // Poster Generic is iOS 27+ only, so storeCard must ship alongside it as the
+  // fallback for iOS 26 and earlier. Apple picks per-device at render time.
+  it('emits posterGeneric with a storeCard fallback', () => {
+    const j = buildPassJson({ memberId: 'C001', name: 'A', tier: 'gold', points: 10 });
+    expect(j.posterGeneric).toBeDefined();
+    expect(j.storeCard).toBeDefined();
+    // Poster supports footerFields; storeCard does not.
+    expect(j.posterGeneric.footerFields[0].value).toBe('LoyRoy Membership');
+    expect(j.storeCard.footerFields).toBeUndefined();
+    // First primary field with an empty label renders as the large title.
+    expect(j.posterGeneric.primaryFields[0]).toMatchObject({ key: 'name', label: '', value: 'A' });
+    // Both faces must show the same live data.
+    expect(j.posterGeneric.headerFields[0].value).toBe(j.storeCard.headerFields[0].value);
+  });
 });
 
 describe('templateDirForTier', () => {
@@ -100,5 +115,10 @@ describe('generatePass', () => {
     expect(Object.keys(passJson)).toEqual(expect.arrayContaining(REQUIRED_TOP_LEVEL));
     expect(passJson.storeCard.primaryFields[0].value).toBe(1250);
     expect(passJson.barcodes[0].format).toBe('PKBarcodeFormatQR');
+    // Both styles must survive signing, otherwise Poster Generic silently
+    // never renders on iOS 27+.
+    expect(passJson.posterGeneric).toBeDefined();
+    expect(passJson.storeCard).toBeDefined();
+    expect(passJson.posterGeneric.footerFields[0].value).toBe('LoyRoy Membership');
   });
 });

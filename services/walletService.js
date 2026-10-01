@@ -17,13 +17,19 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { PKPass } = require('passkit-generator');
+const { PKPass, PassType } = require('passkit-generator');
 
 const config = require('../config');
 const { buildQrPayload } = require('./qrService');
 
 const PASSES_BASE_DIR = path.join(__dirname, '..', 'passes');
+// Legacy storeCard assets. Required for the iOS 26-and-earlier fallback.
 const TEMPLATE_ASSET_NAMES = ['icon.png', 'icon@2x.png', 'logo.png', 'logo@2x.png', 'strip.png'];
+// Poster Generic assets (iOS 27+). Optional: an unbranded pass still renders,
+// it just has no background artwork / primary logo until the merchant uploads
+// them through the Art Studio. artwork.png is the full-bleed background
+// (358x448pt); primaryLogo.png sits over it.
+const POSTER_ASSET_NAMES = ['artwork.png', 'primaryLogo.png'];
 
 const TIER_STYLES = {
   bronze: { backgroundColor: 'rgb(120, 72, 20)' },
@@ -52,6 +58,10 @@ function loadTemplateAssets(templateDir) {
   const assets = {};
   for (const name of TEMPLATE_ASSET_NAMES) {
     assets[name] = loadFile(path.join(templateDir, name), `template asset ${name}`);
+  }
+  for (const name of POSTER_ASSET_NAMES) {
+    const p = path.join(templateDir, name);
+    if (fs.existsSync(p)) assets[name] = loadFile(p, `template asset ${name}`);
   }
   return assets;
 }
@@ -100,6 +110,10 @@ function buildPassJson(memberData) {
   const style = TIER_STYLES[String(tier).toLowerCase()] || TIER_STYLES.bronze;
   const tierLabel = String(tier).toUpperCase();
 
+  // storeCard is kept as the iOS 26-and-earlier fallback; iOS 27+ picks up
+  // posterGeneric, which renders fields over artwork.png. Apple only displays
+  // the poster layout when the pass declares the posterGeneric key, and falls
+  // back per-device, so shipping both keeps older members working.
   return {
     description: 'LoyRoy Membership',
     organizationName: 'LoyRoy',
@@ -108,6 +122,24 @@ function buildPassJson(memberData) {
     ...style,
     foregroundColor: 'rgb(255, 255, 255)',
     labelColor: 'rgb(200, 200, 200)',
+    posterGeneric: {
+      headerFields: [{ key: 'tier', label: 'TIER', value: tierLabel }],
+      // First primary field with an empty label renders as the large title.
+      primaryFields: [
+        { key: 'name', label: '', value: name },
+        { key: 'points', label: 'POINTS', value: points },
+      ],
+      secondaryFields: [{ key: 'member', label: 'MEMBER', value: name }],
+      // Only the first footer field is displayed on a poster pass.
+      footerFields: [{ key: 'org', label: '', value: 'LoyRoy Membership' }],
+      backFields: [
+        {
+          key: 'terms',
+          label: 'TERMS',
+          value: 'Points and tier are managed by LoyRoy. Present this pass at checkout.',
+        },
+      ],
+    },
     storeCard: {
       headerFields: [{ key: 'tier', label: 'TIER', value: tierLabel }],
       primaryFields: [{ key: 'points', label: 'POINTS', value: points }],
@@ -173,13 +205,27 @@ async function generatePass(memberData, opts = {}) {
     }
   );
 
-  pass.type = 'storeCard';
-
-  for (const [group, fields] of Object.entries(passJson.storeCard)) {
-    for (const field of fields) {
-      pass[group].push(field);
-    }
-  }
+  // Poster Generic (iOS 27+) + storeCard fallback (iOS 26 and earlier).
+  //
+  // The `type` setter is deprecated and RESETS the pass to a single style, so
+  // it cannot be used here — it would drop posterGeneric. The constructor also
+  // cannot carry the style keys: OverridablePassProps does not include them, so
+  // joi strips them. `types` is getter-only and hands back the live array, so
+  // both styles are built explicitly and pushed into it.
+  pass.types.push(
+    ...['posterGeneric', 'storeCard'].map((type) => {
+      const passType = new PassType(type);
+      const groups = type === 'posterGeneric'
+        ? ['headerFields', 'primaryFields', 'secondaryFields', 'footerFields', 'backFields']
+        : ['headerFields', 'primaryFields', 'secondaryFields', 'auxiliaryFields', 'backFields'];
+      for (const group of groups) {
+        for (const field of passJson[type][group] || []) {
+          passType[group].push(field);
+        }
+      }
+      return passType;
+    })
+  );
 
   // QR payload resolves to the member (Phase 5 scans feed /redeem, /member/:id).
   pass.setBarcodes({
