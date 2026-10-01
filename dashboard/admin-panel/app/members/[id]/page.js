@@ -15,62 +15,64 @@ export default async function MemberDetailPage({ params }) {
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-4">
-      <Link className="text-sm text-zinc-500 hover:underline" href="/members">
+    <main className="mx-auto max-w-5xl p-4 md:p-6">
+      <Link className="v-muted text-sm hover:underline" href="/members">
         ← Members
       </Link>
-      <h1 className="mt-1 text-xl font-semibold">{member.name}</h1>
-      <dl className="mt-3 grid max-w-md grid-cols-2 gap-1 text-sm">
-        <dt className="text-zinc-500">Tier</dt>
-        <dd>{member.tier}</dd>
-        <dt className="text-zinc-500">Points</dt>
-        <dd>{member.pointsBalance}</dd>
-        <dt className="text-zinc-500">Pass serial</dt>
-        <dd>{member.passSerialNumber || "—"}</dd>
-        <dt className="text-zinc-500">Last visit</dt>
-        <dd>{member.lastVisit || "—"}</dd>
-      </dl>
+      <h1 className="v-title mt-1">{member.name}</h1>
+      <div className="v-card mt-3 max-w-md p-4">
+        <dl className="grid grid-cols-2 gap-1 text-sm">
+          <dt className="v-muted">Tier</dt>
+          <dd>{member.tier}</dd>
+          <dt className="v-muted">Points</dt>
+          <dd>{member.pointsBalance}</dd>
+          <dt className="v-muted">Pass serial</dt>
+          <dd>{member.passSerialNumber || "—"}</dd>
+          <dt className="v-muted">Last visit</dt>
+          <dd>{member.lastVisit || "—"}</dd>
+        </dl>
+      </div>
 
-      <section className="mt-5">
-        <h2 className="font-medium">Adjust points</h2>
+      <section className="v-card mt-4 p-4">
+        <h2 className="font-medium text-white">Adjust points</h2>
         <div className="mt-2">
           <AdjustPointsForm memberId={member.memberId} />
         </div>
         <div className="mt-2">
           <PushButton memberId={member.memberId} />
         </div>
-        <div className="mt-4 border-t border-zinc-200 pt-3">
+        <div className="v-hr mt-4 pt-3">
           <DeleteButton memberId={member.memberId} memberName={member.name} />
         </div>
       </section>
 
-      <section className="mt-6 grid gap-6 md:grid-cols-3">
-        <div>
-          <h2 className="font-medium">Points history</h2>
-          <ul className="mt-1 text-sm">
+      <section className="mt-4 grid gap-4 md:grid-cols-3">
+        <div className="v-card p-4">
+          <h2 className="font-medium text-white">Points history</h2>
+          <ul className="v-divide mt-1 text-sm">
             {(member.history?.points || []).map((p) => (
-              <li key={p.id} className="border-b border-zinc-100 py-1">
-                {p.delta > 0 ? "+" : ""}{p.delta} → {p.balance_after} <span className="text-zinc-500">({p.reason})</span>
+              <li key={p.id} className="py-1">
+                {p.delta > 0 ? "+" : ""}{p.delta} → {p.balance_after} <span className="v-muted">({p.reason})</span>
               </li>
             ))}
           </ul>
         </div>
-        <div>
-          <h2 className="font-medium">Visits</h2>
-          <ul className="mt-1 text-sm">
+        <div className="v-card p-4">
+          <h2 className="font-medium text-white">Visits</h2>
+          <ul className="v-divide mt-1 text-sm">
             {(member.history?.visits || []).map((v) => (
-              <li key={v.id} className="border-b border-zinc-100 py-1">
-                {new Date(v.visited_at).toLocaleString()} {v.note && <span className="text-zinc-500">({v.note})</span>}
+              <li key={v.id} className="py-1">
+                {new Date(v.visited_at).toLocaleString()} {v.note && <span className="v-muted">({v.note})</span>}
               </li>
             ))}
           </ul>
         </div>
-        <div>
-          <h2 className="font-medium">Redemptions</h2>
-          <ul className="mt-1 text-sm">
+        <div className="v-card p-4">
+          <h2 className="font-medium text-white">Redemptions</h2>
+          <ul className="v-divide mt-1 text-sm">
             {(member.history?.redemptions || []).map((r) => (
-              <li key={r.id} className="border-b border-zinc-100 py-1">
-                −{r.points_spent} pts <span className="text-zinc-500">({new Date(r.created_at).toLocaleString()})</span>
+              <li key={r.id} className="py-1">
+                −{r.points_spent} pts <span className="v-muted">({new Date(r.created_at).toLocaleString()})</span>
               </li>
             ))}
           </ul>

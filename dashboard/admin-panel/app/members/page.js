@@ -14,40 +14,40 @@ export default async function MembersPage({ searchParams }) {
   }
 
   return (
-    <main className="mx-auto max-w-5xl p-4">
-      <h1 className="text-xl font-semibold">Members</h1>
+    <main className="mx-auto max-w-5xl p-4 md:p-6">
+      <h1 className="v-title">Members</h1>
       <form className="mt-3 flex gap-2" action="/members" method="get">
         <input
           name="search"
           defaultValue={search}
           placeholder="Search name or email"
-          className="w-full rounded border border-zinc-300 px-3 py-2"
+          className="v-input"
         />
-        <button className="rounded bg-zinc-900 px-4 py-2 text-white" type="submit">
+        <button className="v-btn shrink-0" type="submit">
           Search
         </button>
       </form>
       {error ? (
-        <p className="mt-4 text-sm text-red-600">Backend error: {error}</p>
+        <p className="mt-4 text-sm text-red-400">Backend error: {error}</p>
       ) : (
-        <>
-          <p className="mt-3 text-sm text-zinc-500">{data.count} member(s)</p>
-          <ul className="mt-2 divide-y divide-zinc-200 border-y border-zinc-200">
+        <div className="v-card mt-4 p-4">
+          <p className="v-muted text-sm">{data.count} member(s)</p>
+          <ul className="v-divide mt-2">
             {data.members.map((m) => (
               <li key={m.memberId} className="flex items-center justify-between py-2">
                 <div>
-                  <Link className="font-medium hover:underline" href={`/members/${m.memberId}`}>
+                  <Link className="v-link font-medium" href={`/members/${m.memberId}`}>
                     {m.name}
                   </Link>
-                  <span className="ml-2 text-sm text-zinc-500">
+                  <span className="v-muted ml-2 text-sm">
                     {m.tier} · {m.pointsBalance} pts
                   </span>
                 </div>
-                <span className="text-sm text-zinc-400">{m.email || ""}</span>
+                <span className="v-muted text-sm">{m.email || ""}</span>
               </li>
             ))}
           </ul>
-        </>
+        </div>
       )}
     </main>
   );

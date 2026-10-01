@@ -37,7 +37,7 @@ export default function AuthGate({ children }) {
       </main>
     );
   }
-  if (state.loading) return <main className="p-8 text-sm text-zinc-500">Loading…</main>;
+  if (state.loading) return <main className="p-8 text-sm text-slate-400">Loading…</main>;
   if (!state.user && pathname !== "/login") return null;
   return children;
 }

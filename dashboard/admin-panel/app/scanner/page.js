@@ -101,41 +101,43 @@ export default function ScannerPage() {
   }, [rewardId]);
 
   return (
-    <main className="mx-auto max-w-md p-4">
-      <h1 className="text-xl font-semibold">Redeem scanner</h1>
-      <label className="mt-3 flex flex-col gap-1 text-sm">
-        Reward ID (optional — leave empty for lookup only)
-        <input
-          className="rounded border border-zinc-300 px-3 py-2"
-          value={rewardId}
-          onChange={(e) => setRewardId(e.target.value)}
-          placeholder="reward uuid"
-        />
-      </label>
-      <div className="mt-3">
-        <button className="rounded bg-zinc-900 px-4 py-2 text-white" onClick={toggleCamera}>
-          {cameraOn ? "Stop camera" : "Scan with camera"}
-        </button>
+    <main className="mx-auto max-w-md p-4 md:p-6">
+      <h1 className="v-title">Redeem scanner</h1>
+      <div className="v-card mt-4 flex flex-col gap-3 p-4">
+        <label className="flex flex-col gap-1 text-sm">
+          Reward ID (optional — leave empty for lookup only)
+          <input
+            className="v-input"
+            value={rewardId}
+            onChange={(e) => setRewardId(e.target.value)}
+            placeholder="reward uuid"
+          />
+        </label>
+        <div>
+          <button className="v-btn" onClick={toggleCamera}>
+            {cameraOn ? "Stop camera" : "Scan with camera"}
+          </button>
+        </div>
+        <div id="qr-reader" ref={readerRef} className="w-full" />
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (manual.trim()) redeemByMemberId(memberIdFromPayload(manual));
+          }}
+        >
+          <input
+            className="v-input"
+            placeholder="…or type/scan code manually"
+            value={manual}
+            onChange={(e) => setManual(e.target.value)}
+          />
+          <button className="v-btn-ghost shrink-0" type="submit">
+            Go
+          </button>
+        </form>
+        {result && <p className="text-sm">{result}</p>}
       </div>
-      <div id="qr-reader" ref={readerRef} className="mt-3 w-full" />
-      <form
-        className="mt-4 flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (manual.trim()) redeemByMemberId(memberIdFromPayload(manual));
-        }}
-      >
-        <input
-          className="w-full rounded border border-zinc-300 px-3 py-2"
-          placeholder="…or type/scan code manually"
-          value={manual}
-          onChange={(e) => setManual(e.target.value)}
-        />
-        <button className="rounded border border-zinc-300 px-4 py-2" type="submit">
-          Go
-        </button>
-      </form>
-      {result && <p className="mt-3 text-sm">{result}</p>}
     </main>
   );
 }

@@ -1,26 +1,105 @@
 @import "tailwindcss";
 
+/* Vision-style dark glass theme. All dashboard pages share these
+   primitives so the look stays consistent without per-page bespoke CSS. */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  min-height: 100vh;
+  color: #e8ecf7;
   font-family: Arial, Helvetica, sans-serif;
+  background:
+    radial-gradient(1200px 600px at 85% -10%, rgba(0, 117, 255, 0.28), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(123, 47, 247, 0.2), transparent 60%),
+    linear-gradient(180deg, #0b1030 0%, #070b22 100%);
+  background-attachment: fixed;
+}
+
+.v-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  backdrop-filter: blur(12px);
+}
+
+.v-input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.6rem;
+  color: #e8ecf7;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+}
+
+.v-input::placeholder {
+  color: #7c89a8;
+}
+
+select.v-input option {
+  color: #111;
+}
+
+.v-btn {
+  background: linear-gradient(180deg, #1a9bff, #0075ff);
+  color: #fff;
+  border-radius: 0.6rem;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+}
+
+.v-btn:disabled {
+  opacity: 0.5;
+}
+
+.v-btn-ghost {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0.6rem;
+  padding: 0.5rem 1rem;
+  color: #e8ecf7;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.v-btn-danger {
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  border-radius: 0.6rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.v-btn-danger-solid {
+  background: #b91c1c;
+  border-radius: 0.6rem;
+  padding: 0.25rem 0.75rem;
+  color: #fff;
+}
+
+.v-muted {
+  color: #93a1c0;
+}
+
+.v-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.v-link {
+  color: #7db8ff;
+}
+
+.v-link:hover {
+  text-decoration: underline;
+}
+
+.v-divide > * + * {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.v-hr {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }

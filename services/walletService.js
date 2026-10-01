@@ -22,7 +22,6 @@ const { PKPass } = require('passkit-generator');
 const config = require('../config');
 const { buildQrPayload } = require('./qrService');
 
-const SHARED_TEMPLATE_DIR = path.join(__dirname, '..', 'passes', 'shared');
 const PASSES_BASE_DIR = path.join(__dirname, '..', 'passes');
 const TEMPLATE_ASSET_NAMES = ['icon.png', 'icon@2x.png', 'logo.png', 'logo@2x.png', 'strip.png'];
 

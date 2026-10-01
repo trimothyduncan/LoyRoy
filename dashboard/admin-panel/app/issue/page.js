@@ -51,7 +51,7 @@ export default function IssuePage() {
     <label className="flex flex-col gap-1 text-sm">
       {label}
       <input
-        className="rounded border border-zinc-300 px-3 py-2"
+        className="v-input"
         value={form[k]}
         onChange={(e) => setForm({ ...form, [k]: e.target.value })}
         {...props}
@@ -60,16 +60,16 @@ export default function IssuePage() {
   );
 
   return (
-    <main className="mx-auto max-w-md p-4">
-      <h1 className="text-xl font-semibold">Issue a pass</h1>
-      <form onSubmit={submit} className="mt-4 flex flex-col gap-3">
+    <main className="mx-auto max-w-md p-4 md:p-6">
+      <h1 className="v-title">Issue a pass</h1>
+      <form onSubmit={submit} className="v-card mt-4 flex flex-col gap-3 p-4">
         {field("name", "Name", { required: true })}
         {field("email", "Email", { type: "email" })}
         {field("phone", "Phone")}
         <label className="flex flex-col gap-1 text-sm">
           Tier
           <select
-            className="rounded border border-zinc-300 px-3 py-2"
+            className="v-input"
             value={form.tier}
             onChange={(e) => setForm({ ...form, tier: e.target.value })}
           >
@@ -78,15 +78,11 @@ export default function IssuePage() {
             ))}
           </select>
         </label>
-        <button
-          className="rounded bg-zinc-900 px-3 py-2 text-white disabled:opacity-50"
-          type="submit"
-          disabled={submitting}
-        >
+        <button className="v-btn" type="submit" disabled={submitting}>
           {submitting ? "Generating…" : "Generate & download .pkpass"}
         </button>
       </form>
-      {msg && <p className="mt-3 text-sm text-zinc-600">{msg}</p>}
+      {msg && <p className="v-muted mt-3 text-sm">{msg}</p>}
     </main>
   );
 }

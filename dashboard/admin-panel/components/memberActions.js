@@ -40,7 +40,7 @@ export function AdjustPointsForm({ memberId, onDone }) {
       <label className="text-sm">
         Points Δ
         <input
-          className="ml-2 w-24 rounded border border-zinc-300 px-2 py-1"
+          className="v-input ml-2 w-24"
           value={delta}
           onChange={(e) => setDelta(e.target.value)}
           placeholder="+50 / -20"
@@ -50,16 +50,16 @@ export function AdjustPointsForm({ memberId, onDone }) {
       <label className="text-sm">
         Reason
         <input
-          className="ml-2 rounded border border-zinc-300 px-2 py-1"
+          className="v-input ml-2"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="visit bonus"
         />
       </label>
-      <button className="rounded bg-zinc-900 px-3 py-1 text-white" type="submit">
+      <button className="v-btn" type="submit">
         Apply
       </button>
-      {msg && <span className="text-sm text-zinc-600">{msg}</span>}
+      {msg && <span className="v-muted text-sm">{msg}</span>}
     </form>
   );
 }
@@ -69,7 +69,7 @@ export function PushButton({ memberId }) {
   return (
     <span>
       <button
-        className="rounded border border-zinc-300 px-3 py-1 text-sm"
+        className="v-btn-ghost text-sm"
         onClick={async () => {
           setMsg("");
           try {
@@ -82,7 +82,7 @@ export function PushButton({ memberId }) {
       >
         Send Wallet push
       </button>
-      {msg && <span className="ml-2 text-sm text-zinc-600">{msg}</span>}
+      {msg && <span className="v-muted ml-2 text-sm">{msg}</span>}
     </span>
   );
 }
@@ -109,10 +109,7 @@ export function DeleteButton({ memberId, memberName }) {
 
   if (!confirming) {
     return (
-      <button
-        className="rounded border border-red-300 px-3 py-1 text-sm text-red-700"
-        onClick={() => setConfirming(true)}
-      >
+      <button className="v-btn-danger" onClick={() => setConfirming(true)}>
         Delete member
       </button>
     );
@@ -120,13 +117,13 @@ export function DeleteButton({ memberId, memberName }) {
   return (
     <span className="text-sm">
       Delete {memberName}? Their pass stops updating.
-      <button className="ml-2 rounded bg-red-700 px-3 py-1 text-white" onClick={remove}>
+      <button className="v-btn-danger-solid ml-2" onClick={remove}>
         Confirm delete
       </button>
-      <button className="ml-2 rounded border border-zinc-300 px-3 py-1" onClick={() => setConfirming(false)}>
+      <button className="v-btn-ghost ml-2" onClick={() => setConfirming(false)}>
         Cancel
       </button>
-      {msg && <span className="ml-2 text-zinc-600">{msg}</span>}
+      {msg && <span className="v-muted ml-2">{msg}</span>}
     </span>
   );
 }

@@ -37,18 +37,20 @@ export default function AssetsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-md p-4">
-      <h1 className="text-xl font-semibold">Pass assets</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        Upload icon/logo/strip art (PNG, JPEG, or WebP, ≤5MB). Files land in Supabase Storage via the backend.
-      </p>
-      <input className="mt-3" type="file" accept="image/png,image/jpeg,image/webp" onChange={onFile} />
-      {msg && <p className="mt-3 text-sm text-zinc-600">{msg}</p>}
-      {url && (
-        <p className="mt-2 text-sm">
-          Public URL: <a className="underline" href={url}>{url}</a>
+    <main className="mx-auto max-w-md p-4 md:p-6">
+      <h1 className="v-title">Pass assets</h1>
+      <div className="v-card mt-4 p-4">
+        <p className="v-muted text-sm">
+          Upload icon/logo/strip art (PNG, JPEG, or WebP, ≤5MB). Files land in Supabase Storage via the backend.
         </p>
-      )}
+        <input className="v-input mt-3" type="file" accept="image/png,image/jpeg,image/webp" onChange={onFile} />
+        {msg && <p className="v-muted mt-3 text-sm">{msg}</p>}
+        {url && (
+          <p className="mt-2 text-sm">
+            Public URL: <a className="v-link" href={url}>{url}</a>
+          </p>
+        )}
+      </div>
     </main>
   );
 }
