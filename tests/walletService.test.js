@@ -1,7 +1,10 @@
 'use strict';
 
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const AdmZip = require('adm-zip');
-const { generatePass, buildPassJson } = require('../services/walletService');
+const { generatePass, buildPassJson, templateDirForTier } = require('../services/walletService');
 
 const REQUIRED_TOP_LEVEL = [
   'formatVersion',
@@ -43,6 +46,25 @@ describe('buildPassJson', () => {
 
   it('rejects missing memberId with a 400 error', () => {
     expect(() => buildPassJson({})).toThrow(expect.objectContaining({ status: 400 }));
+  });
+});
+
+describe('templateDirForTier', () => {
+  it('falls back to shared for unknown or missing tiers', () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'passes-'));
+    fs.mkdirSync(path.join(base, 'shared'));
+    expect(templateDirForTier('gold', base)).toBe(path.join(base, 'shared'));
+    expect(templateDirForTier('', base)).toBe(path.join(base, 'shared'));
+    expect(templateDirForTier(undefined, base)).toBe(path.join(base, 'shared'));
+  });
+
+  it('uses the per-tier directory when present', () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'passes-'));
+    fs.mkdirSync(path.join(base, 'shared'));
+    fs.mkdirSync(path.join(base, 'gold.pass'));
+    expect(templateDirForTier('gold', base)).toBe(path.join(base, 'gold.pass'));
+    expect(templateDirForTier('GOLD', base)).toBe(path.join(base, 'gold.pass'));
+    expect(templateDirForTier('silver', base)).toBe(path.join(base, 'shared'));
   });
 });
 

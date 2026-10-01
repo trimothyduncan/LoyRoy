@@ -22,7 +22,9 @@ const { PKPass } = require('passkit-generator');
 const config = require('../config');
 const { buildQrPayload } = require('./qrService');
 
-const TEMPLATE_DIR = path.join(__dirname, '..', 'passes', 'vipMembership.pass');
+const SHARED_TEMPLATE_DIR = path.join(__dirname, '..', 'passes', 'shared');
+const PASSES_BASE_DIR = path.join(__dirname, '..', 'passes');
+const TEMPLATE_ASSET_NAMES = ['icon.png', 'icon@2x.png', 'logo.png', 'logo@2x.png', 'strip.png'];
 
 const TIER_STYLES = {
   bronze: { backgroundColor: 'rgb(120, 72, 20)' },
@@ -47,12 +49,32 @@ function loadFile(filePath, label) {
   }
 }
 
-function loadTemplateAssets() {
+function loadTemplateAssets(templateDir) {
   const assets = {};
-  for (const name of ['icon.png', 'icon@2x.png', 'logo.png', 'logo@2x.png', 'strip.png']) {
-    assets[name] = loadFile(path.join(TEMPLATE_DIR, name), `template asset ${name}`);
+  for (const name of TEMPLATE_ASSET_NAMES) {
+    assets[name] = loadFile(path.join(templateDir, name), `template asset ${name}`);
   }
   return assets;
+}
+
+/**
+ * Per-tier artwork with shared fallback. Drop a tier's PNGs into
+ * `passes/<tier>.pass/` (e.g. `passes/gold.pass/strip.png`) and gold
+ * members pick them up automatically — no code change. Tiers without
+ * their own directory use `passes/shared/`. `baseDir` is injectable
+ * for tests; production always uses the passes/ directory.
+ */
+function templateDirForTier(tier, baseDir = PASSES_BASE_DIR) {
+  const name = String(tier || '').toLowerCase().trim();
+  if (name) {
+    const candidate = path.join(baseDir, `${name}.pass`);
+    try {
+      if (fs.statSync(candidate).isDirectory()) return candidate;
+    } catch {
+      // Missing tier dir → shared fallback below.
+    }
+  }
+  return path.join(baseDir, 'shared');
 }
 
 /**
@@ -106,7 +128,7 @@ function buildPassJson(memberData) {
 /**
  * Generate a signed .pkpass for one member.
  * @param {object} memberData { memberId, name, tier, points, serialNumber?, authenticationToken?, webServiceURL? }
- * @param {object} [opts] { passTypeIdentifier?, teamIdentifier? } — test-only overrides, never used in routes.
+ * @param {object} [opts] { passTypeIdentifier?, teamIdentifier?, templateDir? } — test-only overrides, never used in routes.
  * @returns {Promise<{ buffer: Buffer, serialNumber: string, authenticationToken: string }>}
  */
 async function generatePass(memberData, opts = {}) {
@@ -136,7 +158,7 @@ async function generatePass(memberData, opts = {}) {
   }
 
   const pass = new PKPass(
-    loadTemplateAssets(),
+    loadTemplateAssets(opts.templateDir || templateDirForTier(memberData.tier)),
     {
       wwdr: loadFile(config.wwdrPath, 'WWDR cert'),
       signerCert: loadFile(config.signerCertPath, 'signer cert'),
@@ -175,4 +197,4 @@ async function generatePass(memberData, opts = {}) {
   };
 }
 
-module.exports = { generatePass, buildPassJson, TIER_STYLES };
+module.exports = { generatePass, buildPassJson, TIER_STYLES, templateDirForTier };
