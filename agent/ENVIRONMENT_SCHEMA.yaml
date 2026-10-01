@@ -1,0 +1,112 @@
+version: 1
+policy:
+  secrets_must_never_be_committed: true
+  secrets_must_never_be_logged: true
+  environments:
+    - development
+    - staging
+    - production
+
+variables:
+  NODE_ENV:
+    required: true
+    secret: false
+    consumer: backend
+    source: deployment_or_local
+    validation: enum(development,staging,production)
+
+  APP_URL:
+    required: true
+    secret: false
+    consumer: backend
+    source: deployment
+    validation: valid_url
+
+  API_URL:
+    required: true
+    secret: false
+    consumer: frontend_or_backend
+    source: deployment
+    validation: valid_url
+
+  SUPABASE_URL:
+    required: true
+    secret: false
+    consumer: backend
+    source: supabase
+    validation: valid_url
+
+  SUPABASE_ANON_KEY:
+    required: true
+    secret: public
+    consumer: frontend_or_backend
+    source: supabase
+    validation: presence
+
+  SUPABASE_SERVICE_ROLE_KEY:
+    required: true
+    secret: true
+    consumer: backend
+    source: supabase
+    validation: presence_and_functional_auth_check
+
+  APPLE_TEAM_ID:
+    required: true
+    secret: false
+    consumer: backend
+    source: apple
+    validation: presence
+
+  APPLE_PASS_TYPE_ID:
+    required: true
+    secret: false
+    consumer: backend
+    source: apple
+    validation: presence
+
+  APPLE_KEY_ID:
+    required: conditional
+    secret: protected
+    consumer: backend
+    source: apple
+    validation: presence_if_architecture_requires
+
+  APPLE_PRIVATE_KEY:
+    required: true
+    secret: true
+    consumer: backend
+    source: apple
+    validation: non_disclosing_signing_test
+
+  GOOGLE_WALLET_ISSUER_ID:
+    required: true
+    secret: false
+    consumer: backend
+    source: google
+    validation: presence
+
+  GOOGLE_SERVICE_ACCOUNT_EMAIL:
+    required: true
+    secret: protected
+    consumer: backend
+    source: google
+    validation: presence
+
+  GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY:
+    required: true
+    secret: true
+    consumer: backend
+    source: google
+    validation: non_disclosing_google_auth_test
+
+  JWT_SECRET:
+    required: conditional
+    secret: true
+    consumer: backend
+    source: generated_secret
+    validation: minimum_length
+
+notes:
+  - "Names are canonical targets. If the existing code uses different names, reconcile them deliberately rather than creating duplicates."
+  - "Exact Apple/Google requirements must be verified against the current implementation and official documentation."
+  - "Never store real values in this YAML."

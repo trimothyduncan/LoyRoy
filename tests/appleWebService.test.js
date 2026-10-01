@@ -84,6 +84,23 @@ describe('Apple Wallet Web Service', () => {
     expect(res.status).toBe(200);
   });
 
+  it('DELETE unknown serial with a valid member token → 200 idempotent (stops device retry loops)', async () => {
+    await appleAuth(request(app).post(regPath)).send({ pushToken: 'push-abc' });
+    const ghost = `/apple/v1/devices/DEV-1/registrations/${PASS_TYPE}/GHOST-SERIAL`;
+    const res = await appleAuth(request(app).delete(ghost));
+    expect(res.status).toBe(200);
+    // The real registration is untouched — serials still list WS-1.
+    const list = await appleAuth(request(app).get(`/apple/v1/devices/DEV-1/registrations/${PASS_TYPE}`));
+    expect(list.status).toBe(200);
+    expect(list.body.serialNumbers).toContain('WS-1');
+  });
+
+  it('DELETE unknown serial with a bad token → 401', async () => {
+    const ghost = `/apple/v1/devices/DEV-1/registrations/${PASS_TYPE}/GHOST-SERIAL`;
+    const res = await request(app).delete(ghost).set('Authorization', 'ApplePass wrong');
+    expect(res.status).toBe(401);
+  });
+
   it('POST /v1/log accepts device logs without auth', async () => {
     const res = await request(app).post('/apple/v1/log').send({ logs: ['test log line'] });
     expect(res.status).toBe(200);
