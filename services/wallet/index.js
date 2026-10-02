@@ -12,12 +12,14 @@
  *     — pure validation describing what the device should fetch next; persistent
  *     sync state lives in the database (pass_updates / passes), not here.
  *
- * Providers register by name. Only 'apple' is implemented; 'google' (and any unknown
- * name) resolve through getProvider() which throws a stable, documented error instead
- * of branching provider specifics into callers.
+ * Providers register by name. Apple returns a signed .pkpass Buffer; Google
+ * returns a signed save URL (a Google pass is a REST resource delivered by
+ * redirect, not a downloaded file). Both stay behind this interface, so
+ * routes and the dashboard never branch on provider specifics.
  */
 
 const { appleProvider } = require('./appleProvider');
+const { createGoogleProvider } = require('./googleProvider');
 
 function notImplemented(provider) {
   const err = new Error(
@@ -39,7 +41,7 @@ const KNOWN_PROVIDERS = new Set(['apple', 'google']);
 
 class WalletService {
   constructor({ providers, defaultProvider = 'apple' } = {}) {
-    this.providers = providers || { apple: appleProvider };
+    this.providers = providers || { apple: appleProvider, google: createGoogleProvider() };
     this.defaultProvider = defaultProvider;
   }
 
@@ -57,8 +59,20 @@ class WalletService {
     return { ...result, provider: impl.name };
   }
 
+  /**
+   * Update an issued pass.
+   *
+   * Apple and Google update differently: Apple hands the device a web-service
+   * URL to re-fetch, while Google PATCHes the resource and the installed pass
+   * reflects it. Providers that expose updatePass do the provider-specific
+   * work; the rest reuse createPass (Apple's model).
+   */
   async updatePass(memberData, { provider } = {}) {
     const impl = this.getProvider(provider);
+    if (typeof impl.updatePass === 'function') {
+      const result = await impl.updatePass(memberData);
+      return { ...result, provider: impl.name, updated: true };
+    }
     const result = await impl.createPass(memberData);
     return { ...result, provider: impl.name, updated: true };
   }
@@ -74,13 +88,27 @@ class WalletService {
         provider: 'apple',
       };
     }
+    if (result.provider === 'google') {
+      // Google passes are not downloaded. The user is redirected to a signed
+      // save URL, so there is no MIME type or filename to report.
+      return {
+        delivery: 'redirect',
+        url: result.saveUrl,
+        provider: 'google',
+      };
+    }
     return notImplemented(result.provider);
   }
 
-  syncPassState({ serialNumber, authenticationToken, provider } = {}) {
+  syncPassState({ serialNumber, authenticationToken, provider, objectId } = {}) {
     if (!serialNumber) validation('serialNumber is required');
     if (!authenticationToken) validation('authenticationToken is required');
     const impl = this.getProvider(provider);
+    // Google has no device-side fetch: the object is patched server-side, so
+    // there is no authentication token and nothing for the device to do.
+    if (impl.name === 'google') {
+      return { serialNumber, provider: 'google', action: 'server-patch', objectId };
+    }
     return { serialNumber, provider: impl.name, action: 'fetch-latest' };
   }
 }
