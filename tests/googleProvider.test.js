@@ -236,7 +236,8 @@ describe('googleProvider.createPass', () => {
     expect(seen).toEqual(['gold']);
     const { claims } = decodeJwt(out.saveUrl.split(`${SAVE_URL}/`)[1]);
     expect(claims.payload.loyaltyObjects[0].heroImage.sourceUri.uri).toBe('https://cdn.example/hero.png');
-    expect(claims.payload.loyaltyClasses[0].logo.sourceUri.uri).toBe('https://cdn.example/logo.png');
+    expect(claims.payload.loyaltyClasses[0].programLogo.sourceUri.uri).toBe('https://cdn.example/logo.png');
+    expect(claims.payload.loyaltyClasses[0].logo).toBeUndefined();
   });
 
   it('refuses to mint a save URL with no program logo (Google would reject the save)', async () => {

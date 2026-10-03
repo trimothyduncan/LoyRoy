@@ -155,6 +155,10 @@ function imageFromUrl(uri, description) {
  * `heroImage` is the full-bleed art; Google's equivalent of Poster Generic's
  * artwork.png, so the same published `artwork` slot feeds both platforms.
  *
+ * The program mark goes in `programLogo` — the field Google documents as
+ * required ("LoyaltyClass cannot be created without a program logo"). There
+ * is no `logo` field on LoyaltyClass; sending one is silently ignored, which
+ * is exactly how this bug hid: the class carried art yet Google saw none.
  * Google has no foreground/text colour on LoyaltyClass (it derives text colour
  * from the background), so only hexBackgroundColor is mapped — tier text
  * colours from the Apple side do not transfer.
@@ -167,7 +171,7 @@ function buildClass({ issuerId, tier, art = {}, orgName = 'LoyRoy', backgroundCo
     reviewStatus: 'UNDER_REVIEW',
     programName: orgName,
     ...(art.primaryLogo
-      ? { logo: imageFromUrl(art.primaryLogo, `${orgName} logo`) }
+      ? { programLogo: imageFromUrl(art.primaryLogo, `${orgName} logo`) }
       : {}),
     ...(art.strip ? { heroImage: imageFromUrl(art.strip, `${orgName} ${id} card art`) } : {}),
     ...(backgroundColor ? { hexBackgroundColor: backgroundColor } : {}),
