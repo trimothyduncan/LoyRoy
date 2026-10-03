@@ -19,6 +19,7 @@ export default function ScannerPage() {
   const [rewardId, setRewardId] = useState("");
   const [result, setResult] = useState("");
   const [misses, setMisses] = useState(0);
+  const [diag, setDiag] = useState("");
 
   useEffect(() => {
     return () => {
@@ -111,6 +112,19 @@ export default function ScannerPage() {
       );
       setCameraOn(true);
       setResult("Point at the pass QR — it opens the member on first read.");
+      // Diagnostic readout only (no behavior change): which decoder is in
+      // play and what resolution the camera actually granted. Native camera
+      // reads full-res stills; getUserMedia often grants 640x480, which
+      // starves the ZXing fallback of pixels per module.
+      try {
+        const hasDetector = typeof window !== "undefined" && "BarcodeDetector" in window;
+        const video = document.querySelector("#qr-reader video");
+        const tw = video?.videoWidth || 0;
+        const th = video?.videoHeight || 0;
+        setDiag(`decoder: ${hasDetector ? "BarcodeDetector (native)" : "ZXing fallback"} · frame: ${tw}x${th}`);
+      } catch {
+        setDiag("decoder: unknown");
+      }
     } catch (err) {
       setResult(`Camera error: ${err?.message || err}. Use manual entry below.`);
     } finally {
@@ -183,6 +197,7 @@ export default function ScannerPage() {
             Scanning — {misses} frame{misses === 1 ? "" : "s"} with no code in view yet.
           </p>
         )}
+        {cameraOn && diag && <p className="v-muted text-xs">{diag}</p>}
         {result.startsWith("Redeemed") && (
           <p className="v-muted text-sm">Tip: scan again without a reward ID to open the member profile.</p>
         )}
