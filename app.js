@@ -80,7 +80,8 @@ function createProviderWalletService(db, injectedStorage) {
     let rows;
     try {
       rows = await getPublishedArt(db, tier);
-    } catch {
+    } catch (err) {
+      console.warn(`google-art: pass_art lookup failed for tier=${tier}: ${err.message}`);
       return {};
     }
     const art = {};
@@ -90,10 +91,11 @@ function createProviderWalletService(db, injectedStorage) {
       try {
         const { data } = storage.from(bucket).getPublicUrl(row.storage_path);
         if (data && data.publicUrl) art[row.slot] = data.publicUrl;
-      } catch {
-        // One bad slot must not kill issuance; the pass just ships without it.
+      } catch (err) {
+        console.warn(`google-art: public URL failed slot=${row.slot}: ${err.message}`);
       }
     }
+    console.warn(`google-art: tier=${tier} slots=${Object.keys(art).join(',') || 'none'}`);
     return art;
   };
 
