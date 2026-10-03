@@ -52,9 +52,10 @@ function validation(message) {
 /**
  * Read Google credentials from the environment.
  *
- * The private key arrives from Render as a secret file, an env var with
- * literal "\n" escapes, or a real multi-line PEM — all three are normalized
- * here so callers never handle the difference.
+ * Issuer id and client email are plain env vars (not sensitive). The private
+ * key is also read from its env var — either a real multi-line PEM or one
+ * with literal "\n" escapes, both normalized here. Unlike the Apple-side
+ * certs, there is no secret-file lookup: paste the key content as the value.
  */
 function readCredentials(env = process.env) {
   const issuerId = env.GOOGLE_WALLET_ISSUER_ID;
