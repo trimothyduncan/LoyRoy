@@ -291,13 +291,53 @@ describe('googleProvider.updatePass', () => {
     expect(err.message).not.toContain(privateKey);
   });
 
-  it('maps a missing object to 404 and rate limiting to 429', async () => {
-    const notFound = await authedFetch([{ status: 404, body: { error: { message: 'not found' } } }]);
-    await expect(providerWith({ fetchImpl: notFound.fetchImpl }).updatePass(MEMBER)).rejects.toMatchObject({
-      status: 404,
-      code: 'NOT_FOUND',
-    });
+  it('creates the object when PATCH finds nothing (pass issued but never saved)', async () => {
+    const { fetchImpl, calls } = await authedFetch([
+      { status: 404, body: { error: { message: 'not found' } } }, // PATCH
+      { status: 200, body: { id: 'class-exists' } }, // GET class
+      { status: 200, body: { id: 'object-created' } }, // POST object
+    ]);
+    const out = await providerWith({ fetchImpl }).updatePass(MEMBER);
+    expect(out).toMatchObject({ updated: true, created: true });
 
+    expect(calls[1].opts.method).toBe('PATCH');
+    expect(calls[2].url).toMatch(/\/loyaltyclass\//);
+    expect(calls[2].opts.method).toBeUndefined(); // GET has no method set
+    const posted = calls[3];
+    expect(posted.url).toBe(`${WALLET_API}/loyaltyobject`);
+    expect(posted.opts.method).toBe('POST');
+    expect(JSON.parse(posted.opts.body).loyaltyPoints.balance.int).toBe(1250);
+  });
+
+  it('creates the class too when neither exists yet', async () => {
+    const { fetchImpl, calls } = await authedFetch([
+      { status: 404, body: {} }, // PATCH
+      { status: 404, body: {} }, // GET class
+      { status: 200, body: { id: 'class-created' } }, // POST class
+      { status: 200, body: { id: 'object-created' } }, // POST object
+    ]);
+    const out = await providerWith({ fetchImpl }).updatePass(MEMBER);
+    expect(out).toMatchObject({ updated: true, created: true });
+
+    const classPost = calls[3];
+    expect(classPost.url).toBe(`${WALLET_API}/loyaltyclass`);
+    expect(classPost.opts.method).toBe('POST');
+    expect(JSON.parse(classPost.opts.body).id).toContain('3388000000000000000.');
+  });
+
+  it('retries PATCH once when object creation races (409)', async () => {
+    const { fetchImpl } = await authedFetch([
+      { status: 404, body: {} }, // PATCH
+      { status: 200, body: { id: 'class-exists' } }, // GET class
+      { status: 409, body: { error: { message: 'already exists' } } }, // POST object
+      { status: 200, body: { id: 'ok' } }, // PATCH retry
+    ]);
+    const out = await providerWith({ fetchImpl }).updatePass(MEMBER);
+    expect(out).toMatchObject({ updated: true });
+    expect(out.created).toBeUndefined();
+  });
+
+  it('still maps rate limiting to 429', async () => {
     const limited = await authedFetch([{ status: 429, body: {} }]);
     await expect(providerWith({ fetchImpl: limited.fetchImpl }).updatePass(MEMBER)).rejects.toMatchObject({
       status: 429,

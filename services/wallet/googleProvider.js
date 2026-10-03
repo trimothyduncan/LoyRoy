@@ -330,35 +330,90 @@ function createGoogleProvider({
      * is the source of truth and the installed pass reflects it. So this
      * PATCHes the LoyaltyObject rather than handing anything to the device.
      */
+    /**
+     * Update an installed pass.
+     *
+     * Google has no device poll like Apple's web service: the resource itself
+     * is the source of truth and the installed pass reflects it. So this
+     * PATCHes the LoyaltyObject rather than handing anything to the device.
+     *
+     * First-update subtlety: issuing only mints a signed save JWT — Google
+     * creates the class/object when the user actually saves the pass. If the
+     * member never saved it, there is nothing to PATCH (404). In that case
+     * the class is ensured and the object is POSTed, so the pass exists with
+     * current data instead of failing forever on an object that was never
+     * materialized.
+     */
     async updatePass(memberData) {
       const credentials = readCredentials(env);
       const tier = String(memberData.tier || 'bronze').toLowerCase();
       const art = await resolveArt(tier);
+      const loyaltyClass = buildClass({ issuerId: credentials.issuerId, tier, art });
       const object = buildObject({
         issuerId: credentials.issuerId,
         memberData,
         art,
       });
       const token = await getAccessToken({ credentials, fetchImpl });
-
-      const res = await fetchImpl(`${WALLET_API}/loyaltyobject/${object.id}`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          state: object.state,
-          accountName: object.accountName,
-          loyaltyPoints: object.loyaltyPoints,
-          ...(object.heroImage ? { heroImage: object.heroImage } : {}),
-          textModulesData: object.textModulesData,
-        }),
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      };
+      const objectUrl = `${WALLET_API}/loyaltyobject/${object.id}`;
+      const patchBody = JSON.stringify({
+        state: object.state,
+        accountName: object.accountName,
+        loyaltyPoints: object.loyaltyPoints,
+        ...(object.heroImage ? { heroImage: object.heroImage } : {}),
+        textModulesData: object.textModulesData,
       });
-      if (!res.ok) {
-        throw mapGoogleError(res.status, await res.json().catch(() => ({})), 'update');
+
+      const patched = await fetchImpl(objectUrl, { method: 'PATCH', headers, body: patchBody });
+      if (patched.ok) {
+        return { objectId: object.id, updated: true, serialNumber: `LOYROY-${memberData.memberId}` };
       }
-      return { objectId: object.id, updated: true, serialNumber: `LOYROY-${memberData.memberId}` };
+      if (patched.status !== 404) {
+        throw mapGoogleError(patched.status, await patched.json().catch(() => ({})), 'update');
+      }
+
+      // Object was never materialized (pass issued but never saved, or
+      // created under a different flow). Ensure the class, then create it.
+      const classUrl = `${WALLET_API}/loyaltyclass/${loyaltyClass.id}`;
+      const gotClass = await fetchImpl(classUrl, { headers });
+      if (gotClass.status === 404) {
+        const madeClass = await fetchImpl(`${WALLET_API}/loyaltyclass`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(loyaltyClass),
+        });
+        if (!madeClass.ok && madeClass.status !== 409) {
+          throw mapGoogleError(madeClass.status, await madeClass.json().catch(() => ({})), 'create class');
+        }
+      } else if (!gotClass.ok) {
+        throw mapGoogleError(gotClass.status, await gotClass.json().catch(() => ({})), 'read class');
+      }
+      const madeObject = await fetchImpl(`${WALLET_API}/loyaltyobject`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(object),
+      });
+      if (madeObject.ok) {
+        return {
+          objectId: object.id,
+          updated: true,
+          created: true,
+          serialNumber: `LOYROY-${memberData.memberId}`,
+        };
+      }
+      if (madeObject.status === 409) {
+        // Lost a race with another writer: the object exists now, PATCH once.
+        const retry = await fetchImpl(objectUrl, { method: 'PATCH', headers, body: patchBody });
+        if (retry.ok) {
+          return { objectId: object.id, updated: true, serialNumber: `LOYROY-${memberData.memberId}` };
+        }
+        throw mapGoogleError(retry.status, await retry.json().catch(() => ({})), 'update');
+      }
+      throw mapGoogleError(madeObject.status, await madeObject.json().catch(() => ({})), 'create object');
     },
 
     buildPreview(memberData) {
