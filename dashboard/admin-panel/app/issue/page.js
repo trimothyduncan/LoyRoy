@@ -8,13 +8,34 @@ export default function IssuePage() {
   const [form, setForm] = useState({ name: "", email: "", phone: "", tier: "bronze", provider: "apple" });
   const [msg, setMsg] = useState("");
   const [saveUrl, setSaveUrl] = useState("");
+  const [pkpass, setPkpass] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Share the generated .pkpass straight to AirDrop / email / Messenger via
+  // the Web Share API — no Wallet install needed first. Download stays as the
+  // fallback where sharing is unsupported.
+  async function sharePass() {
+    if (!pkpass) return;
+    try {
+      const file = new File([pkpass.blob], `${pkpass.serial}.pkpass`, {
+        type: "application/vnd.apple.pkpass",
+      });
+      if (typeof navigator === "undefined" || !navigator.canShare?.({ files: [file] })) {
+        setMsg("Sharing isn't supported here — use the downloaded file instead.");
+        return;
+      }
+      await navigator.share({ files: [file], title: "LoyRoy pass" });
+    } catch (err) {
+      if (err?.name !== "AbortError") setMsg(`Error: ${err.message}`);
+    }
+  }
 
   async function submit(e) {
     e.preventDefault();
     if (submitting) return;
     setSubmitting(true);
     setSaveUrl("");
+    setPkpass(null);
     setMsg("Generating…");
     try {
       const res = await fetch("/api/loyroy/create-pass", {
@@ -42,13 +63,14 @@ export default function IssuePage() {
       }
       const blob = await res.blob();
       const serial = res.headers.get("x-pass-serial") || "pass";
+      setPkpass({ blob, serial });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `${serial}.pkpass`;
       a.click();
       URL.revokeObjectURL(url);
-      setMsg(`Pass downloaded (${serial}). AirDrop or email it to an iPhone to install.`);
+      setMsg(`Pass downloaded (${serial}). Share it below, or AirDrop/email the file to an iPhone.`);
     } catch (err) {
       setMsg(`Error: ${err.message}`);
     } finally {
@@ -103,6 +125,11 @@ export default function IssuePage() {
         </button>
       </form>
       {msg && <p className="v-muted mt-3 text-sm">{msg}</p>}
+      {pkpass && form.provider === "apple" && (
+        <button className="v-btn mt-3" type="button" onClick={sharePass}>
+          Share {pkpass.serial}.pkpass (AirDrop / email / Messenger)
+        </button>
+      )}
       {saveUrl && (
         <p className="mt-3 text-sm">
           <a className="underline" href={saveUrl} target="_blank" rel="noreferrer">
