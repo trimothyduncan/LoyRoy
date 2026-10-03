@@ -96,7 +96,10 @@ function buildPassJson(memberData) {
     name = 'Member',
     tier = 'bronze',
     points = 0,
-    serialNumber = buildQrPayload(memberData.memberId),
+    // Serial stays a plain LOYROY-<id>: it threads through Apple URLs,
+    // registrations and push lookups, where slashes would break routing.
+    // The QR *message* (below) is the dashboard URL — different field.
+    serialNumber = `LOYROY-${memberId}`,
     authenticationToken = crypto.randomUUID(),
   } = memberData;
 

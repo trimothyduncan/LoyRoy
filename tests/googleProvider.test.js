@@ -10,6 +10,8 @@
  * failure contracts.
  */
 
+process.env.DASHBOARD_URL = 'https://dashboard.test';
+
 const crypto = require('node:crypto');
 const {
   createGoogleProvider,
@@ -171,7 +173,7 @@ describe('buildClass / buildObject', () => {
   // One scanner must read both platforms, so the QR value has to match Apple.
   it('encodes the same QR payload Apple uses', () => {
     const obj = buildObject({ issuerId: 'I', memberData: MEMBER });
-    expect(obj.barcode).toEqual({ type: 'QR_CODE', value: `LOYROY-${MEMBER.memberId}` });
+    expect(obj.barcode).toEqual({ type: 'QR_CODE', value: `https://dashboard.test/members/${MEMBER.memberId}` });
   });
 
   it('maps points into Google loyaltyPoints', () => {

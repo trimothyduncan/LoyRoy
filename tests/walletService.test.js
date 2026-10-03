@@ -1,5 +1,7 @@
 'use strict';
 
+process.env.DASHBOARD_URL = 'https://dashboard.test';
+
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -42,6 +44,11 @@ describe('buildPassJson', () => {
     expect(a.storeCard.primaryFields[0].value).toBe(10);
     expect(b.storeCard.primaryFields[0].value).toBe(99);
     expect(a.serialNumber).not.toBe(b.serialNumber);
+  });
+
+  it('keeps the default serial URL-free (barcode message is the URL, serial is not)', () => {
+    const j = buildPassJson({ memberId: 'C001', name: 'A', tier: 'gold', points: 10 });
+    expect(j.serialNumber).toBe('LOYROY-C001');
   });
 
   it('rejects missing memberId with a 400 error', () => {
@@ -115,6 +122,9 @@ describe('generatePass', () => {
     expect(Object.keys(passJson)).toEqual(expect.arrayContaining(REQUIRED_TOP_LEVEL));
     expect(passJson.storeCard.primaryFields[0].value).toBe(1250);
     expect(passJson.barcodes[0].format).toBe('PKBarcodeFormatQR');
+    // Barcode message is the dashboard URL (native camera opens the member);
+    // the serial stays a plain LOYROY-<id> for Apple URL safety.
+    expect(passJson.barcodes[0].message).toBe('https://dashboard.test/members/C001');
     // Both styles must survive signing, otherwise Poster Generic silently
     // never renders on iOS 27+.
     expect(passJson.posterGeneric).toBeDefined();

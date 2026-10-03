@@ -27,6 +27,7 @@
  */
 
 const crypto = require('node:crypto');
+const { buildQrPayload } = require('../qrService');
 
 const WALLET_API = 'https://walletobjects.googleapis.com/walletobjects/v1';
 const SCOPE = 'https://www.googleapis.com/auth/wallet_object.issuer';
@@ -196,8 +197,8 @@ function classSuffixFor(tier) {
  * classId must equal the LoyaltyClass id exactly. Both derive from
  * classSuffixFor(tier), so they cannot drift apart.
  *
- * The QR value intentionally matches Apple's (LOYROY-<memberId>) so a single
- * scanner handles both platforms.
+ * The QR value is the shared dashboard URL (see qrService), identical to
+ * Apple's, so a single scanner — or a native camera app — handles both.
  */
 function buildObject({ issuerId, memberData, art = {}, classSuffix }) {
   const {
@@ -219,7 +220,7 @@ function buildObject({ issuerId, memberData, art = {}, classSuffix }) {
     accountName: name,
     // Google's own points model keeps the balance in sync with the app's.
     loyaltyPoints: { label: 'Points', balance: { int: Number(points) || 0 } },
-    barcode: { type: 'QR_CODE', value: `LOYROY-${memberId}` },
+    barcode: { type: 'QR_CODE', value: buildQrPayload(memberId) },
     ...(art.artwork ? { heroImage: imageFromUrl(art.artwork, `${name} loyalty card`) } : {}),
     textModulesData: [
       { id: 'TIER', header: 'TIER', body: String(tier).toUpperCase() },

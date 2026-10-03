@@ -29,9 +29,12 @@ export default function ScannerPage() {
   }, []);
 
   function memberIdFromPayload(text) {
-    // Pass QR encodes LOYROY-<memberId>; hardware scanners may append newline.
+    // Pass QR encodes a dashboard URL (.../members/<id>); legacy passes and
+    // hardware scanners send LOYROY-<memberId>, sometimes with newline.
     const t = text.trim();
-    return t.startsWith("LOYROY-") ? t.slice("LOYROY-".length).trim() : t;
+    if (t.startsWith("LOYROY-")) return t.slice("LOYROY-".length).trim();
+    const uuid = t.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    return uuid ? uuid[0] : t;
   }
 
   // Diagnostic state: the error callback fires on every missed frame, so only
@@ -128,7 +131,7 @@ export default function ScannerPage() {
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       ctx.drawImage(bitmap, 0, 0, w, h);
       bitmap.close?.();
-      const code = jsQR(ctx.getImageData(0, 0, w, h).data, w, h);
+      const code = jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: "attemptBoth" });
       if (code?.data) {
         redeemByMemberId(memberIdFromPayload(code.data));
       } else {
