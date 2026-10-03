@@ -276,7 +276,7 @@ describe('googleProvider.updatePass', () => {
     ).toBe(true);
 
     const patch = calls[1];
-    expect(patch.url).toBe(`${WALLET_API}/loyaltyobject/3388000000000000000.${MEMBER.memberId}`);
+    expect(patch.url).toBe(`${WALLET_API}/loyaltyObject/3388000000000000000.${MEMBER.memberId}`);
     expect(patch.opts.method).toBe('PATCH');
     expect(patch.opts.headers.Authorization).toBe('Bearer tok-123');
     expect(JSON.parse(patch.opts.body).loyaltyPoints.balance.int).toBe(1250);
@@ -301,10 +301,10 @@ describe('googleProvider.updatePass', () => {
     expect(out).toMatchObject({ updated: true, created: true });
 
     expect(calls[1].opts.method).toBe('PATCH');
-    expect(calls[2].url).toMatch(/\/loyaltyclass\//);
+    expect(calls[2].url).toMatch(/\/loyaltyClass\//);
     expect(calls[2].opts.method).toBeUndefined(); // GET has no method set
     const posted = calls[3];
-    expect(posted.url).toBe(`${WALLET_API}/loyaltyobject`);
+    expect(posted.url).toBe(`${WALLET_API}/loyaltyObject`);
     expect(posted.opts.method).toBe('POST');
     expect(JSON.parse(posted.opts.body).loyaltyPoints.balance.int).toBe(1250);
   });
@@ -320,7 +320,7 @@ describe('googleProvider.updatePass', () => {
     expect(out).toMatchObject({ updated: true, created: true });
 
     const classPost = calls[3];
-    expect(classPost.url).toBe(`${WALLET_API}/loyaltyclass`);
+    expect(classPost.url).toBe(`${WALLET_API}/loyaltyClass`);
     expect(classPost.opts.method).toBe('POST');
     expect(JSON.parse(classPost.opts.body).id).toContain('3388000000000000000.');
   });
@@ -335,6 +335,21 @@ describe('googleProvider.updatePass', () => {
     const out = await providerWith({ fetchImpl }).updatePass(MEMBER);
     expect(out).toMatchObject({ updated: true });
     expect(out.created).toBeUndefined();
+  });
+
+  it('uses the camelCase resource paths Google documents on every call', async () => {
+    const { fetchImpl, calls } = await authedFetch([
+      { status: 404, body: {} }, // PATCH
+      { status: 404, body: {} }, // GET class
+      { status: 200, body: { id: 'class-created' } }, // POST class
+      { status: 200, body: { id: 'object-created' } }, // POST object
+    ]);
+    await providerWith({ fetchImpl }).updatePass(MEMBER);
+    const walletUrls = calls.slice(1).map((c) => c.url);
+    expect(walletUrls.length).toBeGreaterThan(0);
+    for (const url of walletUrls) {
+      expect(url).not.toMatch(/loyaltyobject|loyaltyclass/);
+    }
   });
 
   it('still maps rate limiting to 429', async () => {

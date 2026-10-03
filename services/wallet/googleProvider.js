@@ -359,7 +359,7 @@ function createGoogleProvider({
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       };
-      const objectUrl = `${WALLET_API}/loyaltyobject/${object.id}`;
+      const objectUrl = `${WALLET_API}/loyaltyObject/${object.id}`;
       const patchBody = JSON.stringify({
         state: object.state,
         accountName: object.accountName,
@@ -378,10 +378,10 @@ function createGoogleProvider({
 
       // Object was never materialized (pass issued but never saved, or
       // created under a different flow). Ensure the class, then create it.
-      const classUrl = `${WALLET_API}/loyaltyclass/${loyaltyClass.id}`;
+      const classUrl = `${WALLET_API}/loyaltyClass/${loyaltyClass.id}`;
       const gotClass = await fetchImpl(classUrl, { headers });
       if (gotClass.status === 404) {
-        const madeClass = await fetchImpl(`${WALLET_API}/loyaltyclass`, {
+        const madeClass = await fetchImpl(`${WALLET_API}/loyaltyClass`, {
           method: 'POST',
           headers,
           body: JSON.stringify(loyaltyClass),
@@ -392,7 +392,7 @@ function createGoogleProvider({
       } else if (!gotClass.ok) {
         throw mapGoogleError(gotClass.status, await gotClass.json().catch(() => ({})), 'read class');
       }
-      const madeObject = await fetchImpl(`${WALLET_API}/loyaltyobject`, {
+      const madeObject = await fetchImpl(`${WALLET_API}/loyaltyObject`, {
         method: 'POST',
         headers,
         body: JSON.stringify(object),
