@@ -32,10 +32,99 @@ function toMemberJson(m) {
   };
 }
 
-function createAppRouter({ db, wallet, push }) {
+function createAppRouter({ db, wallet, push, walletService }) {
   const router = Router();
 
+  function requireProviderWallets() {
+    if (!walletService || typeof walletService.createPass !== 'function') {
+      const err = new Error("wallet: provider 'google' is not implemented yet (AppleWalletProvider only).");
+      err.status = 501;
+      err.code = 'WALLET_PROVIDER_NOT_IMPLEMENTED';
+      throw err;
+    }
+    return walletService;
+  }
+
+  /**
+   * Google passes live as `passes` rows (schema 002: platform apple/google),
+   * not as members.pass_serial/auth_token — those stay Apple-only. The
+   * provider_serial holds the LoyaltyObject id, provider_token the class id,
+   * which is what updatePass needs to PATCH later.
+   */
+  async function recordGooglePass(memberId, { objectId, classId }) {
+    const { data: existing } = await db
+      .from('passes')
+      .select('id')
+      .eq('member_id', memberId)
+      .eq('platform', 'google')
+      .eq('status', 'active')
+      .maybeSingle();
+    if (existing) {
+      await db
+        .from('passes')
+        .update({ provider_serial: objectId, provider_token: classId, updated_at: new Date().toISOString() })
+        .eq('id', existing.id);
+      return;
+    }
+    const { error } = await db.from('passes').insert({
+      member_id: memberId,
+      platform: 'google',
+      provider_serial: objectId,
+      provider_token: classId,
+      status: 'active',
+    });
+    if (error) {
+      const err = new Error(error.message || 'Could not record google pass.');
+      err.status = 500;
+      throw err;
+    }
+  }
+
+  async function getActiveGooglePasses(memberId) {
+    const { data, error } = await db
+      .from('passes')
+      .select('id,provider_serial,provider_token')
+      .eq('member_id', memberId)
+      .eq('platform', 'google')
+      .eq('status', 'active');
+    if (error) {
+      const err = new Error(error.message || 'Could not load google passes.');
+      err.status = 500;
+      throw err;
+    }
+    return data || [];
+  }
+
+  /**
+   * Push the member's current balance/name/tier into every active Google
+   * object. Google has no device poll, so without this PATCH installed
+   * passes would go stale the moment points move.
+   */
+  async function syncMemberGooglePasses(member) {
+    const rows = await getActiveGooglePasses(member.id);
+    if (!rows.length) return 0;
+    const facade = requireProviderWallets();
+    let updated = 0;
+    for (let i = 0; i < rows.length; i += 1) {
+      await facade.updatePass(
+        {
+          memberId: member.id,
+          name: member.name,
+          tier: member.tier,
+          points: member.points_balance,
+        },
+        { provider: 'google' }
+      );
+      updated += 1;
+    }
+    return updated;
+  }
+
   // POST /create-pass -------------------------------------------------
+  // provider=apple (default) streams the signed .pkpass download via the
+  // legacy wallet service. provider=google issues through the provider facade
+  // and returns the signed save URL as JSON — a Google pass is a link, not a
+  // file, so there is no binary body and no Apple device signalling.
   router.post(
     '/create-pass',
     [
@@ -43,11 +132,12 @@ function createAppRouter({ db, wallet, push }) {
       body('customerProfile.email').optional().isEmail().withMessage('must be a valid email'),
       body('customerProfile.phone').optional().isString(),
       body('tier').optional().isIn(['bronze', 'silver', 'gold', 'platinum', 'vip']),
+      body('provider').optional().isIn(['apple', 'google']).withMessage('provider must be apple or google'),
     ],
     validate,
     async (req, res, next) => {
       try {
-        const { customerProfile, tier } = req.body;
+        const { customerProfile, tier, provider = 'apple' } = req.body;
         let member = null;
         if (customerProfile.email) {
           const { data } = await db
@@ -64,6 +154,28 @@ function createAppRouter({ db, wallet, push }) {
             phone: customerProfile.phone,
             tier: tier || 'bronze',
           });
+        }
+
+        if (provider === 'google') {
+          const facade = requireProviderWallets();
+          const result = await facade.createPass(
+            {
+              memberId: member.id,
+              name: member.name,
+              tier: member.tier,
+              points: member.points_balance,
+            },
+            { provider: 'google' }
+          );
+          await recordGooglePass(member.id, result);
+          res.json({
+            memberId: member.id,
+            provider: 'google',
+            saveUrl: result.saveUrl,
+            objectId: result.objectId,
+            classId: result.classId,
+          });
+          return;
         }
 
         const { buffer, serialNumber, authenticationToken } = await wallet.generatePass({
@@ -117,7 +229,8 @@ function createAppRouter({ db, wallet, push }) {
           await touchPassUpdate(db, member.pass_serial);
           await push.notifyPassUpdated(member.pass_serial, { db });
         }
-        res.json({ memberId, newBalance });
+        const googleUpdated = await syncMemberGooglePasses(member);
+        res.json({ memberId, newBalance, ...(googleUpdated ? { google: { updated: googleUpdated } } : {}) });
       } catch (err) {
         next(err);
       }
@@ -142,7 +255,8 @@ function createAppRouter({ db, wallet, push }) {
           await touchPassUpdate(db, member.pass_serial);
           await push.notifyPassUpdated(member.pass_serial, { db });
         }
-        res.json(result);
+        const googleUpdated = await syncMemberGooglePasses(member);
+        res.json({ ...result, ...(googleUpdated ? { google: { updated: googleUpdated } } : {}) });
       } catch (err) {
         next(err);
       }

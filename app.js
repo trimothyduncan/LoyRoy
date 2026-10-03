@@ -54,14 +54,63 @@ function createStorageBackedWallet(db, injectedStorage) {
   };
 }
 
-function createApp({ db, wallet, push, passTypeIdentifier, storage } = {}) {
+/**
+ * Provider facade for wallet issuance across Apple and Google.
+ *
+ * Routes that accept provider=google go through this instead of the legacy
+ * Apple-only walletService above. Google art reuses the same Storage-published
+ * slots (primaryLogo/strip/artwork) mapped to public URLs; without storage or
+ * a bucket the resolver yields no art and issuance still works.
+ */
+function createProviderWalletService(db, injectedStorage) {
+  const { createWalletService } = require('./services/wallet');
+  const { appleProvider } = require('./services/wallet/appleProvider');
+  const { createGoogleProvider } = require('./services/wallet/googleProvider');
+  const { getPublishedArt } = require('./services/artService');
+
+  const resolveArt = async (tier) => {
+    const bucket = process.env.SUPABASE_STORAGE_BUCKET;
+    const storage = injectedStorage || require('./database/db').getDb().storage;
+    if (!storage || !bucket || typeof storage.from !== 'function') return {};
+    let rows;
+    try {
+      rows = await getPublishedArt(db, tier);
+    } catch {
+      return {};
+    }
+    const art = {};
+    for (const row of rows || []) {
+      if (!['primaryLogo', 'strip', 'artwork'].includes(row.slot)) continue;
+      if (art[row.slot] || !row.storage_path) continue; // rows are newest-first
+      try {
+        const { data } = storage.from(bucket).getPublicUrl(row.storage_path);
+        if (data && data.publicUrl) art[row.slot] = data.publicUrl;
+      } catch {
+        // One bad slot must not kill issuance; the pass just ships without it.
+      }
+    }
+    return art;
+  };
+
+  return createWalletService({
+    providers: { apple: appleProvider, google: createGoogleProvider({ resolveArt }) },
+  });
+}
+
+function createApp({ db, wallet, push, passTypeIdentifier, storage, walletService } = {}) {
   const app = express();
   const database = db || lazyDb();
 
   // The real wallet service renders art from Supabase Storage (the only durable
   // copy — Render has no persistent disk). Tests inject a fake `wallet` and are
   // left untouched.
-  const walletService = wallet || createStorageBackedWallet(database, storage);
+  const appleWallet = wallet || createStorageBackedWallet(database, storage);
+
+  // Provider facade (Apple + Google). An explicit `walletService: null`
+  // disables it (google issuance reports 501); otherwise a real facade is
+  // built. Tests inject a stub to avoid touching credentials.
+  const providerWallets =
+    walletService !== undefined ? walletService : createProviderWalletService(database, storage);
 
   app.use(cors());
   // 8mb accommodates base64 pass-asset uploads on /admin/upload-asset
@@ -74,7 +123,7 @@ function createApp({ db, wallet, push, passTypeIdentifier, storage } = {}) {
   });
 
   // Section B: Apple Wallet Web Service — Apple's own auth scheme, no service key.
-  app.use('/apple', createAppleRouter({ db: database, wallet: walletService, passTypeIdentifier }));
+  app.use('/apple', createAppleRouter({ db: database, wallet: appleWallet, passTypeIdentifier }));
 
   app.use(serviceAuth);
   app.use(createAdminRouter({ db: database, storage }));
@@ -82,8 +131,9 @@ function createApp({ db, wallet, push, passTypeIdentifier, storage } = {}) {
   app.use(
     createAppRouter({
       db: database,
-      wallet: walletService,
+      wallet: appleWallet,
       push: push || require('./services/pushService'),
+      walletService: providerWallets,
     })
   );
 
