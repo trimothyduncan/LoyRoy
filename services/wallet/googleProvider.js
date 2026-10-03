@@ -50,6 +50,20 @@ function validation(message) {
 }
 
 /**
+ * Google refuses to create a LoyaltyClass with no program logo (Apple renders
+ * fine without one). Fail fast with a merchant-actionable error instead of
+ * minting a save URL that dies when the user taps it.
+ */
+function needsLogo() {
+  const err = new Error(
+    'Google requires a program logo: publish one in the Art Studio (primaryLogo slot) before issuing Google passes.'
+  );
+  err.status = 422;
+  err.code = 'GOOGLE_CLASS_NEEDS_LOGO';
+  return err;
+}
+
+/**
  * Read Google credentials from the environment.
  *
  * Issuer id and client email are plain env vars (not sensitive). The private
@@ -300,6 +314,7 @@ function createGoogleProvider({
       const credentials = readCredentials(env);
       const tier = String(memberData.tier || 'bronze').toLowerCase();
       const art = await resolveArt(tier);
+      if (!art.primaryLogo) throw needsLogo();
 
       const loyaltyClass = buildClass({ issuerId: credentials.issuerId, tier, art });
       const loyaltyObject = buildObject({
@@ -388,7 +403,11 @@ function createGoogleProvider({
           body: JSON.stringify(loyaltyClass),
         });
         if (!madeClass.ok && madeClass.status !== 409) {
-          throw mapGoogleError(madeClass.status, await madeClass.json().catch(() => ({})), 'create class');
+          const detail = await madeClass.json().catch(() => ({}));
+          const message =
+            detail?.error?.message || detail?.message || `HTTP ${madeClass.status}`;
+          if (/logo/i.test(message)) throw needsLogo();
+          throw mapGoogleError(madeClass.status, detail, 'create class');
         }
       } else if (!gotClass.ok) {
         throw mapGoogleError(gotClass.status, await gotClass.json().catch(() => ({})), 'read class');

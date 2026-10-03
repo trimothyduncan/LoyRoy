@@ -213,7 +213,9 @@ describe('buildClass / buildObject', () => {
 
 describe('googleProvider.createPass', () => {
   it('returns a save URL carrying the class and object', async () => {
-    const out = await providerWith().createPass(MEMBER);
+    const out = await providerWith({
+      resolveArt: async () => ({ primaryLogo: 'https://cdn.example/logo.png' }),
+    }).createPass(MEMBER);
     expect(out.saveUrl.startsWith(`${SAVE_URL}/`)).toBe(true);
     expect(out.objectId).toBe(`3388000000000000000.${MEMBER.memberId}`);
     expect(out.classId).toBe('3388000000000000000.loyaltyTierGold');
@@ -235,6 +237,13 @@ describe('googleProvider.createPass', () => {
     const { claims } = decodeJwt(out.saveUrl.split(`${SAVE_URL}/`)[1]);
     expect(claims.payload.loyaltyObjects[0].heroImage.sourceUri.uri).toBe('https://cdn.example/hero.png');
     expect(claims.payload.loyaltyClasses[0].logo.sourceUri.uri).toBe('https://cdn.example/logo.png');
+  });
+
+  it('refuses to mint a save URL with no program logo (Google would reject the save)', async () => {
+    await expect(providerWith().createPass(MEMBER)).rejects.toMatchObject({
+      status: 422,
+      code: 'GOOGLE_CLASS_NEEDS_LOGO',
+    });
   });
 
   it('fails with a config error when credentials are absent', async () => {
@@ -335,6 +344,18 @@ describe('googleProvider.updatePass', () => {
     const out = await providerWith({ fetchImpl }).updatePass(MEMBER);
     expect(out).toMatchObject({ updated: true });
     expect(out.created).toBeUndefined();
+  });
+
+  it('maps a logo-less class rejection to the same actionable error', async () => {
+    const { fetchImpl } = await authedFetch([
+      { status: 404, body: {} }, // PATCH
+      { status: 404, body: {} }, // GET class
+      { status: 400, body: { error: { message: 'LoyaltyClass cannot be created without a program logo.' } } },
+    ]);
+    await expect(providerWith({ fetchImpl }).updatePass(MEMBER)).rejects.toMatchObject({
+      status: 422,
+      code: 'GOOGLE_CLASS_NEEDS_LOGO',
+    });
   });
 
   it('uses the camelCase resource paths Google documents on every call', async () => {
