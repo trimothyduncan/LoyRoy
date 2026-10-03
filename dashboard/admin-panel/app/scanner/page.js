@@ -20,6 +20,7 @@ export default function ScannerPage() {
   const [result, setResult] = useState("");
   const [misses, setMisses] = useState(0);
   const [diag, setDiag] = useState("");
+  const [snapping, setSnapping] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -69,6 +70,75 @@ export default function ScannerPage() {
       setResult(`Redeemed ✓ New balance: ${data.newBalance}`);
     } catch (err) {
       setResult(`Error: ${err.message}`);
+    }
+  }
+
+  // Still-photo decode: the native camera wins because it processes full-res
+  // stills, while video scanning is stuck at ~1080p. This captures a
+  // high-resolution photo and decodes it on-device with jsQR — same page,
+  // same flow, no pass re-issues. Falls back to a video-frame grab when the
+  // ImageCapture API is unavailable.
+  async function snapAndDecode() {
+    if (snapping) return;
+    if (cameraOn) {
+      await scannerRef.current?.clear().catch(() => {});
+      scannerRef.current = null;
+      setCameraOn(false);
+    }
+    setSnapping(true);
+    setResult("Capturing photo…");
+    let stream = null;
+    try {
+      const jsQR = (await import("jsqr")).default;
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 4032 }, height: { ideal: 3024 } },
+        audio: false,
+      });
+      const track = stream.getVideoTracks()[0];
+      let bitmap = null;
+      try {
+        if (typeof window !== "undefined" && typeof window.ImageCapture === "function") {
+          bitmap = await createImageBitmap(await new window.ImageCapture(track).takePhoto());
+        }
+      } catch {
+        bitmap = null;
+      }
+      if (!bitmap) {
+        const video = document.createElement("video");
+        video.muted = true;
+        video.playsInline = true;
+        video.srcObject = stream;
+        await video.play();
+        await new Promise((resolve) => {
+          if (video.readyState >= 2) resolve();
+          else video.addEventListener("loadeddata", resolve, { once: true });
+        });
+        bitmap = await createImageBitmap(video);
+        video.pause();
+        video.srcObject = null;
+      }
+      const settings = track.getSettings?.() || {};
+      setDiag(`still: ${bitmap.width}x${bitmap.height} (track ${settings.width || "?"}x${settings.height || "?"})`);
+      const scale = Math.min(1, 3200 / Math.max(bitmap.width, bitmap.height));
+      const w = Math.round(bitmap.width * scale);
+      const h = Math.round(bitmap.height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      bitmap.close?.();
+      const code = jsQR(ctx.getImageData(0, 0, w, h).data, w, h);
+      if (code?.data) {
+        redeemByMemberId(memberIdFromPayload(code.data));
+      } else {
+        setResult("No code in that photo — fill the frame with the pass QR and retry.");
+      }
+    } catch (err) {
+      setResult(`Camera error: ${err?.message || err}. Use manual entry below.`);
+    } finally {
+      stream?.getTracks().forEach((t) => t.stop());
+      setSnapping(false);
     }
   }
 
@@ -183,8 +253,11 @@ export default function ScannerPage() {
           />
         </label>
         <div>
-          <button className="v-btn" onClick={toggleCamera} disabled={starting}>
+          <button className="v-btn" onClick={toggleCamera} disabled={starting || snapping}>
             {starting ? "Starting camera…" : cameraOn ? "Stop camera" : "Scan with camera"}
+          </button>
+          <button className="v-btn-ghost mt-2" onClick={snapAndDecode} disabled={starting || snapping}>
+            {snapping ? "Reading photo…" : "Snap photo & decode"}
           </button>
         </div>
         <div id="qr-reader" ref={readerRef} className="w-full" />
