@@ -101,6 +101,15 @@ export default function ScannerPage() {
           // disableFlip must stay true — the flip retry never resets the canvas
           // transform, so repeated misses leave the sampled region mirrored.
           disableFlip: true,
+          // iOS Safari has no BarcodeDetector (diagnosed live: "ZXing fallback"),
+          // so the WASM decoder gets whatever resolution getUserMedia grants —
+          // often ~640x480, too few pixels per module for a phone-screen QR.
+          // Request HD explicitly; browsers that cannot grant it fall back.
+          videoConstraints: {
+            facingMode: "environment",
+            width: { min: 1280, ideal: 1920 },
+            height: { min: 720, ideal: 1080 },
+          },
         },
         (decoded) => {
           scanner.clear().catch(() => {});
@@ -113,18 +122,23 @@ export default function ScannerPage() {
       setCameraOn(true);
       setResult("Point at the pass QR — it opens the member on first read.");
       // Diagnostic readout only (no behavior change): which decoder is in
-      // play and what resolution the camera actually granted. Native camera
-      // reads full-res stills; getUserMedia often grants 640x480, which
-      // starves the ZXing fallback of pixels per module.
-      try {
-        const hasDetector = typeof window !== "undefined" && "BarcodeDetector" in window;
-        const video = document.querySelector("#qr-reader video");
-        const tw = video?.videoWidth || 0;
-        const th = video?.videoHeight || 0;
-        setDiag(`decoder: ${hasDetector ? "BarcodeDetector (native)" : "ZXing fallback"} · frame: ${tw}x${th}`);
-      } catch {
-        setDiag("decoder: unknown");
-      }
+      // play and what resolution the camera actually granted. The size is
+      // read after video metadata loads — reading it synchronously here
+      // reports 0x0 even on a healthy stream.
+      const reportFrame = () => {
+        try {
+          const hasDetector = typeof window !== "undefined" && "BarcodeDetector" in window;
+          const video = document.querySelector("#qr-reader video");
+          const tw = video?.videoWidth || 0;
+          const th = video?.videoHeight || 0;
+          setDiag(`decoder: ${hasDetector ? "BarcodeDetector (native)" : "ZXing fallback"} · frame: ${tw}x${th}`);
+        } catch {
+          setDiag("decoder: unknown");
+        }
+      };
+      reportFrame();
+      document.querySelector("#qr-reader video")?.addEventListener("loadedmetadata", reportFrame, { once: true });
+      setTimeout(reportFrame, 2500);
     } catch (err) {
       setResult(`Camera error: ${err?.message || err}. Use manual entry below.`);
     } finally {
