@@ -71,7 +71,12 @@ function createProviderWalletService(db, injectedStorage) {
   const resolveArt = async (tier) => {
     const bucket = process.env.SUPABASE_STORAGE_BUCKET;
     const storage = injectedStorage || require('./database/db').getDb().storage;
-    if (!storage || !bucket || typeof storage.from !== 'function') return {};
+    if (!storage || !bucket || typeof storage.from !== 'function') {
+      console.warn(
+        `google-art: no art for tier=${tier} (storage:${storage ? 'ok' : 'missing'} bucket:${bucket ? 'set' : 'missing'})`
+      );
+      return {};
+    }
     let rows;
     try {
       rows = await getPublishedArt(db, tier);
